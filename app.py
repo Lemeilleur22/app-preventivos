@@ -186,7 +186,7 @@ if st.session_state.pantalla == "landing":
                 Sistema de gestión de mantenimiento
             </div>
 
-            <button onclick="window.parent.postMessage({type: 'streamlit:setComponentValue', value: 'login'}, '*')" class="btn">
+            <button onclick="window.parent.postMessage({{type: 'streamlit:setComponentValue', value: 'login'}}, '*')" class="btn">
                 Acceder
             </button>
 
