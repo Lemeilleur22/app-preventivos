@@ -750,14 +750,11 @@ if modo == "🌎 General":
         jpnum_ot = fila_ot.iloc[0]["jpnum"]
         jpnum_ot = str(jpnum_ot).strip()
 
-        st.write("JP preventivo:", repr(jpnum_ot))
-
         tareas_jp = supabase.table("jobplan_tareas") \
             .select("*") \
             .eq("jpnum", str(jpnum_ot)) \
             .order("secuencia") \
             .execute().data
-        st.write("Tareas encontradas:", tareas_jp)
 
         evidencia_existente = fila_ot.iloc[0].get("evidencia_url")
 
