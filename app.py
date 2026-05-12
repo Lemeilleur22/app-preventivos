@@ -65,7 +65,7 @@ def mostrar_detalle_ejecucion(fecha_inicio, fecha_cierre):
             else:
                 duracion_fmt = "Dato inválido"
 
-    st.markdown(f"""
+    html = f"""
     <style>
     .detalle-card {{
         background: white;
@@ -151,7 +151,8 @@ def mostrar_detalle_ejecucion(fecha_inicio, fecha_cierre):
             </div>
         </div>
     </div>
-    """, unsafe_allow_html=True)
+    """
+    components.html(html, height=360)
 
 
 def img_to_base64(path):
