@@ -964,7 +964,7 @@ if modo == "Admin":
         st.subheader("Gestion de personal")
 
         tecnicos_todos = (
-            supabase.table("tecnicos")
+            supabase.table(tecnicos)
             .select("*")
             .execute()
             .data
