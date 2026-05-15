@@ -412,7 +412,7 @@ if not st.session_state.get("user"):
 @st.cache_data(ttl=60)
 def get_tecnicos():
     return (
-        supabase.table(tecnicos)
+        supabase.table("tecnicos")
         .select("*")
         .eq("activo", True)
         .execute()
@@ -964,7 +964,7 @@ if modo == "Admin":
         st.subheader("Gestion de personal")
 
         tecnicos_todos = (
-            supabase.table(tecnicos)
+            supabase.table("tecnicos")
             .select("*")
             .execute()
             .data
