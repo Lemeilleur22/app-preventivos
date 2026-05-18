@@ -1061,6 +1061,7 @@ if modo == "General":
                 "estatus"
             ]],
             use_container_width=True
+            hide_index=True
         )
     else:
         st.info("No tienes OTs pendientes. Gracias por tu trabajo. 🙂")
