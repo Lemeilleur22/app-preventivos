@@ -517,6 +517,9 @@ if modo == "Admin":
                 descripcion = str(row["description"]).upper()
                 pmnum = str(row.get("pmnum")).strip().upper()
 
+                if "NODO" in descripcion:
+                    continue
+
                 partes_location = location.split()
                 codigo_sede = location.split()[-1].strip()
 
