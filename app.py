@@ -581,7 +581,7 @@ if modo == "Admin":
                         candidatos = [
                             t for t in tecnicos
                             if t["area"] == "SCI"
-                            and str(t.get("turno_actual")).strip() == ""
+                            and str(t.get("turno_actual")).strip() == "1"
                             and t["id"] != tecnico_cba["id"]
                         ]
 
