@@ -1573,7 +1573,7 @@ if modo == "General":
             else:
                 st.warning("Sin evidencia final valida")
 
-            foto_fin = foto_fin = st.file_uploader(
+            foto_fin = st.file_uploader(
                 "Sube evidencia de fin de tarea",
                 type=["jpg", "jpeg", "png"],
                 key=f"fin{ot_sel}"
