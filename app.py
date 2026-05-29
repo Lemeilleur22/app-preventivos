@@ -797,7 +797,7 @@ if modo == "Admin":
                         "sede": sede
                     }).eq("numero_ot", row["wonum"]).execute()
 
-                    actualizados += 1
+                actualizados += 1
 
                 st.success(f"{actualizados} preventivos actualizados")
 
