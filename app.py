@@ -312,7 +312,7 @@ if st.session_state.pantalla == "login":
     colum1, colum2, colum3 = st.columns([1, 2, 1])
 
     with colum2:
-        st.subheader("👷‍♂️ Login")
+        st.subheader("Login")
 
         usuario_input = st.text_input("Usuario")
         password = st.text_input("Contraseña", type="password")
