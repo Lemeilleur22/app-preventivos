@@ -110,7 +110,7 @@ def cargar_preventivos_dashboard():
     ).dt.tz_convert("America/Mexico_City")
 
     df["ANIO"] = df["created_at_dt"].dt.year
-    df["MES_NUM"] = df["created_at"].dt.month
+    df["MES_NUM"] = df["created_at_dt"].dt.month
     df["MES"] = df["MES_NUM"].map(MESES_CORTOS).fillna("SIN FECHA")
 
     hoy = date.today()
