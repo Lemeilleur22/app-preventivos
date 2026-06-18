@@ -983,7 +983,7 @@ if modo == "Admin":
                         }),
                         use_container_width=True,
                         hide_index=True,
-                        height=165
+                        height=190
                     )
 
                 with col_area:
