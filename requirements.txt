@@ -7,3 +7,4 @@ plotly
 reportlab
 kaleido
 matplotlib
+pillow
