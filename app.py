@@ -494,7 +494,7 @@ def mostrar_detalle_jobplan(ot_data):
         st.info("Esta OT no tiene Job Plan asignado.")
         return
 
-    st.write(f"**Job Plan:**" {jpnum}"")
+    st.write(f"**Job Plan:** {jpnum}")
 
     tareas = cargar_tareas_jobplan(jpnum)
 
