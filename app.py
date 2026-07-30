@@ -3008,7 +3008,6 @@ if modo == "Admin":
                         "numero_ot",
                         "descripcion",
                         "sede",
-                        "fecha_visible_tecnico",
                         "fecha_cierre",
                         "estatus",
                         "seguimiento"
