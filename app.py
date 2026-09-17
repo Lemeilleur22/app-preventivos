@@ -23,20 +23,82 @@ from html import escape
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import landscape, letter
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-st.set_page_config(layout="wide")
+
+st.set_page_config(
+    page_title="Centro de Control IFM",
+    layout="wide"
+)
 
 st.markdown("""
 <style>
-div.stButton > button {
-    background: linear-gradient(135deg, #e30613, #ff2b2b);
-    color: white;
-    padding: 16px 45px;
-    border-radius: 12px;
-    font-size: 18px;
-    font-weight: 600;
-    border: none;
-    box-shadow: 0 10px 25px rgba(227,6,19,0.35);
+
+/* Fondo general */
+.stApp {
+    background-color: #f7f8fa;
 }
+
+/* Contenedor principal */
+.block-container {
+    max-width: 1500px;
+    padding-top: 2rem;
+    padding-bottom: 4rem;
+}
+
+/* Sidebar */
+[data-testid="stSidebar"] {
+    background-color: #ffffff;
+    border-right: 1px solid #e5e7eb;
+}
+
+/* Titulos */
+h1 {
+    font-size: 2rem !important;
+    font-weight: 750 !important;
+    color: #111827;
+}
+
+h2, h3 {
+    color: #1f2937;
+}
+
+/* Tarjetas Streamlit */
+[data-testid="stVerticalBlockBorderWrapper"] {
+    background: white;
+    border-radius: 14px;
+    border: 1px solid #e5e7eb;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+}
+
+/* Dataframes */
+[data-testid="stDataFrame"] {
+    background: white;
+    border-radius: 12px;
+    overflow: hidden;
+}
+
+/* Inputs */
+[data-baseweb="input"],
+[data-baseweb="select"] {
+    border-radius: 10px;
+}
+
+/* Botones */
+.stButton > button {
+    border-radius: 9px;
+    font-weight: 600;
+}
+
+/* Boton primario */
+.stButton > button[kind="primary"] {
+    background-color: #e30613;
+    border-color: #e30613;
+}
+
+/* Separadores */
+hr {
+    border-color: #e5e7eb;
+}
+
 </style>
 """, unsafe_allow_html=True)
 
@@ -2930,14 +2992,23 @@ if modo == "General":
 
 if modo == "Admin":
 
-    tab0, tab1, tab2, tab3, tab4, tab5 = st.tabs([
-        "HOME",
-        "Carga a sistema",
-        "Vista técnico",
-        "Evidencias",
-        "Tecnicos",
-        "Refaccionamiento"
-    ])
+    with st.sidebar:
+
+        st.markdown("### Centro de control - Administrador")
+        seccion_admin = st.radio(
+            "Navegacion",
+            [
+                "Inicio",
+                "Operaciones",
+                "Cargas",
+                "Auditoria",
+                "Personal",
+                "Refacciones",
+                "Configuracion"
+            ],
+            label_visibility="collapsed",
+            key="navegacion_admin"
+        )
 
     # ---------------
     # HOME DASHBOARD
@@ -2948,8 +3019,12 @@ if modo == "Admin":
         fin = inicio + timedelta(days=6)
         return inicio, fin
 
-    with tab0:
-        st.subheader("Dashboard general")
+    if seccion_admin == "Inicio":
+
+        st.markdown("# Centro de Control")
+        st.caption(
+            "Resumen general de operaciones y cumplimiento"
+        )
         df_dash = cargar_preventivos_dashboard()
 
         if df_dash.empty:
@@ -3520,7 +3595,11 @@ if modo == "Admin":
     # ---------------
     # PRIMERA PESTAÑA
     # ---------------
-    with tab1:
+    if seccion_admin == "Cargas":
+        st.markdown("# Centro de cargas")
+        st.caption(
+            "Importacion de MFM, Job plans, roles y exportacion de informacion"
+        )
 
         # FILA 1
         col1, col2 = st.columns(2)
@@ -4363,7 +4442,12 @@ if modo == "Admin":
     # ----------------
     # SEGUNDA PESTAÑA
     # ----------------
-    with tab2:
+    if seccion_admin == "Operaciones":
+        st.markdown("# Operaciones")
+        st.caption(
+            "Consulta, seguimiento y gestion de OTs"
+        )
+        
         vista_tecnico_admin(solo_lectura=False)
 
         st.markdown("---")
@@ -4388,7 +4472,11 @@ if modo == "Admin":
     # ---------------
     # TERCERA PESTAÑA
     # ---------------
-    with tab3:
+    if seccion_admin == "Auditoria":
+        st.markdown("# Auditoría y revisión de OTs")
+        st.caption(
+            "Consulta de OTs cerradas y evidencias de ejecución"
+        )
         st.subheader("Auditoría")
 
         hoy = date.today()
@@ -4580,8 +4668,12 @@ if modo == "Admin":
                             else:
                                 st.info("Sin evidencia final")
 
-    with tab4:
-        st.subheader("Gestion de personal")
+    if seccion_admin == "Personal":
+        st.markdown("# Gestión de personal")
+        st.caption(
+            "Tecnicos, areas y roles de turno"
+        )
+        st.subheader("Gestión de técnicos")
 
         tecnicos_todos = (
             supabase.table("tecnicos")
@@ -4624,8 +4716,12 @@ if modo == "Admin":
                     st.cache_data.clear()
                     st.rerun()
 
-    with tab5:
-        st.subheader("Historico de Refacciones")
+    if seccion_admin == "Refacciones":
+        st.markdown("Refacciones")
+        st.caption(
+            "Inventario, solicitudes y control de refacciones"
+        )
+        st.subheader("Refaccionamiento")
 
         inventario, historial = obtener_inventario_refacciones()
         st.dataframe(
@@ -4650,6 +4746,32 @@ if modo == "Admin":
         st.plotly_chart(fig, use_container_width=True)
 
         vista_admin_refacciones_solicitudes()
+
+    if seccion_admin == "Configuracion":
+        st.markdown("# Configuración")
+        st.caption(
+            "Ajustes y parámetros del sistema"
+        )
+        col1, col2 = st.columns(2)
+
+        with col1:
+            with st.container(border=True):
+                st.subheader("Reglas de asignacion")
+                st.write(
+                    "Administracion de restricciones por area, " \
+                    "turno, Job Plan, PM y ubicacion."
+                )
+                st.info(
+                    "IFSI,IFCO,CBA,CLC,JPNUM y PMNUM"
+                )
+        with col2:
+            with st.container(border=True):
+                st.subheader("Parametros de sistema")
+                st.write(
+                    "validaciones automaticas de datos."
+                )
+                st.success("Proteccion contra OTS duplicadas activa")
+                st.success("Normalizacion de numero de OT activa")
 
 # --------------------
 # PUBLICO GENERAL
