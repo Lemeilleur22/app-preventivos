@@ -3946,7 +3946,7 @@ if modo == "Admin":
                     # ---------------
                     if es_clc:
                         candidatos = [
-                            t for t in tecnicos
+                            t for t in candidatos
                             if limpiar_turno(t.get("turno_actual")) in ["1", "2"]
                             and t["id"] != tecnico_cba["id"]
                         ]
