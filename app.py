@@ -2534,7 +2534,430 @@ def mostrar_checklist_arranque(ot_data, solo_lectura=False, fecha_checklist=None
  # -------------------------------------------
  # REGLAS PARA REFACCIONAMIENTO (FIN)
  # -------------------------------------------
+def vista_operaciones_admin():
 
+    preventivos = cargar_tabla_completa(
+        "preventivos",
+        "*"
+    )
+
+    tecnicos_db = cargar_tabla_completa(
+        "tecnicos",
+        "id,nombre,area,turno_actual,activo"
+    )
+
+    df = pd.DataFrame(preventivos)
+
+    if df.empty:
+        st.info("No hay órdenes de trabajo cargadas.")
+        return
+
+    df_tecnicos = pd.DataFrame(tecnicos_db)
+
+    # ==========================================
+    # ASEGURAR COLUMNAS
+    # ==========================================
+
+    columnas_necesarias = [
+        "numero_ot",
+        "descripcion",
+        "sede",
+        "estatus",
+        "tecnico_id",
+        "created_at",
+        "schedfinish",
+        "fecha_inicio",
+        "fecha_cierre",
+        "jpnum",
+        "pmnum"
+    ]
+
+    for columna in columnas_necesarias:
+        if columna not in df.columns:
+            df[columna] = None
+
+    # ==========================================
+    # AGREGAR DATOS DEL TECNICO
+    # ==========================================
+
+    if not df_tecnicos.empty:
+
+        df_tecnicos = df_tecnicos.rename(
+            columns={
+                "id": "tecnico_id",
+                "nombre": "tecnico",
+                "area": "area_tecnico",
+                "turno_actual": "turno_tecnico"
+            }
+        )
+
+        df = df.merge(
+            df_tecnicos[
+                [
+                    "tecnico_id",
+                    "tecnico",
+                    "area_tecnico",
+                    "turno_tecnico"
+                ]
+            ],
+            on="tecnico_id",
+            how="left"
+        )
+
+    else:
+        df["tecnico"] = "Sin asignar"
+        df["area_tecnico"] = "Sin área"
+        df["turno_tecnico"] = None
+
+    df["tecnico"] = df["tecnico"].fillna("Sin asignar")
+    df["area_tecnico"] = df["area_tecnico"].fillna("Sin área")
+
+    # ==========================================
+    # NORMALIZAR DATOS
+    # ==========================================
+
+    df["estatus"] = (
+        df["estatus"]
+        .fillna("")
+        .astype(str)
+        .str.strip()
+        .str.upper()
+    )
+
+    df["created_at_dt"] = pd.to_datetime(
+        df["created_at"],
+        errors="coerce",
+        utc=True
+    )
+
+    df["schedfinish_dt"] = pd.to_datetime(
+        df["schedfinish"],
+        errors="coerce"
+    )
+
+    hoy = date.today()
+
+    df["vencida"] = (
+        df["estatus"].isin(["PENDIENTE", "EN PROCESO"])
+        & df["schedfinish_dt"].notna()
+        & (df["schedfinish_dt"].dt.date < hoy)
+    )
+
+    # ==========================================
+    # KPIs
+    # ==========================================
+
+    total = len(df)
+
+    pendientes = len(
+        df[df["estatus"] == "PENDIENTE"]
+    )
+
+    proceso = len(
+        df[df["estatus"] == "EN PROCESO"]
+    )
+
+    realizadas = len(
+        df[df["estatus"] == "REALIZADO"]
+    )
+
+    vencidas = int(df["vencida"].sum())
+
+    sin_asignar = len(
+        df[
+            df["tecnico_id"].isna()
+        ]
+    )
+
+    col1, col2, col3, col4, col5, col6 = st.columns(6)
+
+    col1.metric(
+        "OTs",
+        total
+    )
+
+    col2.metric(
+        "Pendientes",
+        pendientes
+    )
+
+    col3.metric(
+        "En proceso",
+        proceso
+    )
+
+    col4.metric(
+        "Realizadas",
+        realizadas
+    )
+
+    col5.metric(
+        "Vencidas",
+        vencidas
+    )
+
+    col6.metric(
+        "Sin asignar",
+        sin_asignar
+    )
+
+    st.markdown("")
+
+    # ==========================================
+    # FILTROS
+    # ==========================================
+
+    with st.container(border=True):
+
+        st.markdown("### Filtros")
+
+        col_buscar, col_estado = st.columns([2, 1])
+
+        with col_buscar:
+
+            busqueda = st.text_input(
+                "Buscar OT, descripción o sede",
+                placeholder="Ej. A87424983, comedor, CLC...",
+                key="operacion_busqueda"
+            )
+
+        with col_estado:
+
+            estados_disponibles = sorted(
+                [
+                    x
+                    for x in df["estatus"].dropna().unique()
+                    if x
+                ]
+            )
+
+            estado_sel = st.multiselect(
+                "Estado",
+                estados_disponibles,
+                key="operacion_estado"
+            )
+
+        col_area, col_tecnico, col_vencidas = st.columns(3)
+
+        with col_area:
+
+            areas = sorted(
+                df["area_tecnico"]
+                .dropna()
+                .unique()
+                .tolist()
+            )
+
+            area_sel = st.multiselect(
+                "Área",
+                areas,
+                key="operacion_area"
+            )
+
+        with col_tecnico:
+
+            nombres_tecnicos = sorted(
+                df["tecnico"]
+                .dropna()
+                .unique()
+                .tolist()
+            )
+
+            tecnico_sel = st.multiselect(
+                "Técnico",
+                nombres_tecnicos,
+                key="operacion_tecnico"
+            )
+
+        with col_vencidas:
+
+            solo_vencidas = st.toggle(
+                "Solo OTs vencidas",
+                key="operacion_vencidas"
+            )
+
+    # ==========================================
+    # APLICAR FILTROS
+    # ==========================================
+
+    df_filtrado = df.copy()
+
+    if busqueda:
+
+        termino = busqueda.strip().lower()
+
+        mascara = (
+            df_filtrado["numero_ot"]
+            .fillna("")
+            .astype(str)
+            .str.lower()
+            .str.contains(termino, na=False)
+            |
+            df_filtrado["descripcion"]
+            .fillna("")
+            .astype(str)
+            .str.lower()
+            .str.contains(termino, na=False)
+            |
+            df_filtrado["sede"]
+            .fillna("")
+            .astype(str)
+            .str.lower()
+            .str.contains(termino, na=False)
+        )
+
+        df_filtrado = df_filtrado[mascara]
+
+    if estado_sel:
+        df_filtrado = df_filtrado[
+            df_filtrado["estatus"].isin(estado_sel)
+        ]
+
+    if area_sel:
+        df_filtrado = df_filtrado[
+            df_filtrado["area_tecnico"].isin(area_sel)
+        ]
+
+    if tecnico_sel:
+        df_filtrado = df_filtrado[
+            df_filtrado["tecnico"].isin(tecnico_sel)
+        ]
+
+    if solo_vencidas:
+        df_filtrado = df_filtrado[
+            df_filtrado["vencida"] == True
+        ]
+
+    # ==========================================
+    # RESULTADOS
+    # ==========================================
+
+    st.markdown("### Órdenes de trabajo")
+
+    st.caption(
+        f"{len(df_filtrado)} registros encontrados"
+    )
+
+    columnas_tabla = [
+        "numero_ot",
+        "descripcion",
+        "sede",
+        "tecnico",
+        "area_tecnico",
+        "turno_tecnico",
+        "estatus",
+        "schedfinish",
+        "vencida"
+    ]
+
+    columnas_tabla = [
+        c
+        for c in columnas_tabla
+        if c in df_filtrado.columns
+    ]
+
+    st.dataframe(
+        df_filtrado[columnas_tabla],
+        use_container_width=True,
+        hide_index=True,
+        column_config={
+            "numero_ot": "OT",
+            "descripcion": "Descripción",
+            "sede": "Sede",
+            "tecnico": "Técnico",
+            "area_tecnico": "Área",
+            "turno_tecnico": "Turno",
+            "estatus": "Estado",
+            "schedfinish": "Fecha programada",
+            "vencida": st.column_config.CheckboxColumn(
+                "Vencida"
+            )
+        }
+    )
+
+    # ==========================================
+    # SELECCIONAR OT
+    # ==========================================
+
+    if df_filtrado.empty:
+        st.info(
+            "No existen órdenes con los filtros seleccionados."
+        )
+        return
+
+    opciones_ot = (
+        df_filtrado["numero_ot"]
+        .dropna()
+        .astype(str)
+        .tolist()
+    )
+
+    ot_sel = st.selectbox(
+        "Selecciona una OT",
+        opciones_ot,
+        key="operacion_ot_seleccionada"
+    )
+
+    fila = df_filtrado[
+        df_filtrado["numero_ot"].astype(str) == ot_sel
+    ]
+
+    if fila.empty:
+        return
+
+    ot = fila.iloc[0]
+
+    # ==========================================
+    # RESUMEN DE OT
+    # ==========================================
+
+    st.markdown("---")
+    st.markdown(f"## OT {ot_sel}")
+
+    col1, col2, col3, col4 = st.columns(4)
+
+    with col1:
+        st.caption("Estado")
+        st.write(
+            f"**{ot.get('estatus', 'Sin estado')}**"
+        )
+
+    with col2:
+        st.caption("Técnico")
+        st.write(
+            f"**{ot.get('tecnico', 'Sin asignar')}**"
+        )
+
+    with col3:
+        st.caption("Área")
+        st.write(
+            f"**{ot.get('area_tecnico', 'Sin área')}**"
+        )
+
+    with col4:
+        st.caption("Sede")
+        st.write(
+            f"**{ot.get('sede') or 'Sin sede'}**"
+        )
+
+    st.write(
+        f"**Descripción:** {ot.get('descripcion') or ''}"
+    )
+
+    if ot.get("jpnum"):
+        st.write(
+            f"**Job Plan:** {ot.get('jpnum')}"
+        )
+
+    if ot.get("pmnum"):
+        st.write(
+            f"**PM:** {ot.get('pmnum')}"
+        )
+
+    if bool(ot.get("vencida")):
+        st.error(
+            "Esta orden está vencida y continúa abierta."
+        )
 
 def vista_tecnico_admin(solo_lectura=False):
     st.subheader("Visualizacion modo técnico.")
@@ -4448,7 +4871,17 @@ if modo == "Admin":
             "Consulta, seguimiento y gestion de OTs"
         )
         
-        vista_tecnico_admin(solo_lectura=False)
+        vista_operaciones_admin()
+
+        st.markdown("---")
+
+        with st.expander(
+            "Gestion avanzada por tecnico",
+            expanded=False
+        ):
+            vista_tecnico_admin(
+                solo_lectura=False
+            )
 
         st.markdown("---")
         st.subheader("Preventivos no asignados")
@@ -4717,7 +5150,7 @@ if modo == "Admin":
                     st.rerun()
 
     if seccion_admin == "Refacciones":
-        st.markdown("Refacciones")
+        st.markdown("# Refacciones")
         st.caption(
             "Inventario, solicitudes y control de refacciones"
         )
