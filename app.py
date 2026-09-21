@@ -2534,6 +2534,8 @@ def mostrar_checklist_arranque(ot_data, solo_lectura=False, fecha_checklist=None
  # -------------------------------------------
  # REGLAS PARA REFACCIONAMIENTO (FIN)
  # -------------------------------------------
+
+
 def vista_operaciones_admin():
 
     preventivos = cargar_tabla_completa(
@@ -2958,6 +2960,7 @@ def vista_operaciones_admin():
         st.error(
             "Esta orden está vencida y continúa abierta."
         )
+
 
 def vista_tecnico_admin(solo_lectura=False):
     st.subheader("Visualizacion modo técnico.")
@@ -4572,7 +4575,7 @@ if modo == "Admin":
                     )
 
                     ots_existentes = {
-                        str(x["numero_ot"]).strip().upper() 
+                        str(x["numero_ot"]).strip().upper()
                         for x in existentes
                         if x.get("numero_ot")
                     }
@@ -4586,12 +4589,12 @@ if modo == "Admin":
 
                     df_carga = (
                         df_carga.drop_duplicates(
-                            subset=["numero_ot"], 
+                            subset=["numero_ot"],
                             keep="first"
                         )
                         .reset_index(drop=True)
                     )
-                    
+
                     nuevos = [
                         row for row in df_carga.to_dict(orient="records")
                         if row["numero_ot"] not in ots_existentes
@@ -4870,37 +4873,31 @@ if modo == "Admin":
         st.caption(
             "Consulta, seguimiento y gestion de OTs"
         )
-        
-        vista_operaciones_admin()
 
-        st.markdown("---")
+        vista_tecnico_admin(
+            solo_lectura=False
+        )
 
         with st.expander(
-            "Gestion avanzada por tecnico",
+            "Preventivos no asignados",
             expanded=False
         ):
-            vista_tecnico_admin(
-                solo_lectura=False
-            )
 
-        st.markdown("---")
-        st.subheader("Preventivos no asignados")
+            no_asignados_db = supabase.table("preventivos_no_asignados") \
+                .select("*") \
+                .order("fecha_carga", desc=True) \
+                .execute().data
 
-        no_asignados_db = supabase.table("preventivos_no_asignados") \
-            .select("*") \
-            .order("fecha_carga", desc=True) \
-            .execute().data
+            if no_asignados_db:
+                df_no = pd.DataFrame(no_asignados_db)
 
-        if no_asignados_db:
-            df_no = pd.DataFrame(no_asignados_db)
-
-            st.dataframe(
-                df_no[["numero_ot", "descripcion", "motivo", "fecha_carga"]],
-                use_container_width=True,
-                hide_index=True
-            )
-        else:
-            st.info("No hay preventivos sin asignar")
+                st.dataframe(
+                    df_no[["numero_ot", "descripcion", "motivo", "fecha_carga"]],
+                    use_container_width=True,
+                    hide_index=True
+                )
+            else:
+                st.info("No hay preventivos sin asignar")
 
     # ---------------
     # TERCERA PESTAÑA
@@ -4964,7 +4961,7 @@ if modo == "Admin":
                         df_resultados
                         .sort_values(by="created_at", ascending=False)
                         .drop_duplicates(subset=["numero_ot"], keep="first"
-                        )
+                                         )
                         .reset_index(drop=True)
                     )
 
@@ -4991,7 +4988,8 @@ if modo == "Admin":
 
                     if not fila.empty:
                         estado_actual = fila.iloc[0]["estatus"]
-                        evidencia_inicio = fila.iloc[0].get("evidencia_inicio_url")
+                        evidencia_inicio = fila.iloc[0].get(
+                            "evidencia_inicio_url")
                         evidencia_fin = fila.iloc[0].get("evidencia_fin_url")
                         anotaciones = fila.iloc[0].get("anotaciones")
                         fecha_inicio = fila.iloc[0].get("fecha_inicio")
@@ -5003,8 +5001,8 @@ if modo == "Admin":
                         if tecnico_id:
                             tecnico = (
                                 supabase.table("tecnicos")
-                                .select("nombre") 
-                                .eq("id", tecnico_id) 
+                                .select("nombre")
+                                .eq("id", tecnico_id)
                                 .execute()
                                 .data
                             )
@@ -5050,7 +5048,7 @@ if modo == "Admin":
                                 fecha_checklist=fecha_sel
                             )
                         else:
-                            with st.expander("Detalles de tareas", expanded=True):
+                            with st.expander("Detalles de tareas", expanded=False):
                                 mostrar_detalle_jobplan(
                                     ot_data, solo_dropdown=True)
 
@@ -5191,7 +5189,7 @@ if modo == "Admin":
             with st.container(border=True):
                 st.subheader("Reglas de asignacion")
                 st.write(
-                    "Administracion de restricciones por area, " \
+                    "Administracion de restricciones por area, "
                     "turno, Job Plan, PM y ubicacion."
                 )
                 st.info(
