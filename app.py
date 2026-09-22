@@ -1426,8 +1426,9 @@ def enviar_correo_refaccionamiento(solicitudes):
             f"Marca: {solicitud.get('marca', '')}",
             f"Modelo: {solicitud.get('numero_modelo', '')}",
             f"Equipo: {solicitud.get('equipo', '')}",
-            f"Ubicación: {solicitud.get('ubicación', '')}",
+            f"Ubicación: {solicitud.get('ubicacion', '')}",
             f"Solicitado por: {supervisor}",
+            f"Comentario admin: {solicitud.get('comentario_admin', '')}",
         ])
 
         foto_url = solicitud.get("foto_url")
@@ -1461,7 +1462,7 @@ def enviar_correo_refaccionamiento(solicitudes):
             )
         )
 
-        foto_url = solicitud.get(foto_url)
+        foto_url = solicitud.get("foto_url")
         foto_html = ""
 
         if (
@@ -1485,6 +1486,7 @@ def enviar_correo_refaccionamiento(solicitudes):
             <td>{escape(str(solicitud.get("equipo", "")))}</td>
             <td>{escape(str(solicitud.get("ubicacion", "")))}</td>
             <td>{escape(str(supervisor))}</td>
+            <td>{escape(str(solicitud.get("comentario_admin", "") or ""))}</td>
             <td>{foto_html}</td>
         </tr>
         """
@@ -1521,6 +1523,7 @@ def enviar_correo_refaccionamiento(solicitudes):
                     <th style="padding:8px;border:1px solid #ddd;">Equipo</th>
                     <th style="padding:8px;border:1px solid #ddd;">Ubicación</th>
                     <th style="padding:8px;border:1px solid #ddd;">Supervisor</th>
+                    <th style="padding:8px;border:1px solid #ddd;">Comentario admin</th>
                     <th style="padding:8px;border:1px solid #ddd;">Foto</th>
                 </tr>
             </thead>
@@ -1652,28 +1655,53 @@ def vista_admin_refacciones_solicitudes():
             key="editor_refacciones_pendientes"
         )
 
+        seleccion_indices = editado[
+            editado["Enviar"] == True
+        ].index.tolist()
+
+        seleccionadas = pendientes.loc[
+            seleccion_indices
+        ].copy()
+
+        cantidad_seleccionada = len(
+            seleccionadas
+        )
+
+        st.caption(
+            f"{cantidad_seleccionada} requisiciones seleccionadas"
+        )
+
         col_guardar, col_enviar = st.columns([1, 2])
 
         with col_guardar:
+
             if st.button(
                 "Guardar comentarios",
                 use_container_width=True,
                 key="guardar_comentarios_refacciones"
             ):
+
                 cambios = 0
 
                 for idx, fila_editada in editado.iterrows():
-                    solicitud_id = pendientes.loc[idx, "id"]
+
+                    solicitud_id = pendientes.loc[
+                        idx,
+                        "id"
+                    ]
 
                     comentario_nuevo = str(
                         fila_editada.get("Comentario") or ""
                     ).strip()
 
                     comentario_actual = str(
-                        pendientes.loc[idx].get("comentario_admin") or ""
+                        pendientes.loc[idx].get(
+                            "comentario_admin"
+                        ) or ""
                     ).strip()
 
                     if comentario_nuevo != comentario_actual:
+
                         supabase.table(
                             "solicitudes_refacciones"
                         ).update({
@@ -1693,50 +1721,50 @@ def vista_admin_refacciones_solicitudes():
 
                 if cambios:
                     st.success(
-                        f"{cambios} comentarios guardados."
+                        f"{cambios} comentario(s) guardado(s)."
                     )
                 else:
                     st.info(
-                        "No hubo cambios en comentarios."
+                        "No hubo cambios en los comentarios."
                     )
+
                 st.rerun()
 
         with col_enviar:
+
             enviar_lote = st.button(
-                f"Enviar seleccionadas por correo ({cantidad_seleccionada})",
+                f"Enviar seleccionadas por correo "
+                f"({cantidad_seleccionada})",
                 type="primary",
                 use_container_width=True,
                 disabled=(cantidad_seleccionada == 0),
                 key="enviar_refacciones_lote"
             )
 
-        seleccion_indices = editado[
-            editado["Enviar"] == True
-        ].index.tolist()
-
-        seleccionadas = pendientes.loc[
-            seleccion_indices
-        ].copy()
-
-        cantidad_seleccionada = len(
-            seleccionadas
-        )
-        st.caption(
-            f"{cantidad_seleccionada} requisiciones seleccionadas"
-        )
-
-        enviar_lote = st.button(
-            f"Enviar seleccionadas por correo ({cantidad_seleccionada})",
-            type="primary",
-            use_container_width=True,
-            disabled=(cantidad_seleccionada == 0),
-            key="enviar_refacciones_lote"
-        )
-
         if enviar_lote:
-            solicitudes = seleccionadas.to_dict(
-                orient="records"
-            )
+
+            solicitudes = []
+            for idx in seleccion_indices:
+                solicitud = pendientes.loc[idx].to_dict()
+                comentario = str(
+                    editado.loc[idx].get("Comentario") or ""
+                ).strip()
+
+                solicitud["comentario admin"] = comentario
+                solicitudes.append(solicitud)
+
+                supabase.table(
+                    "solicitudes_refacciones"
+                ).update({
+                    "comentario_admin": comentario,
+                    "updated_at": datetime.now(
+                        timezone.utc
+                    ).isoformat()
+                }).eq(
+                    "id",
+                    solicitud["id"]
+                ).execute()
+
             correo_ok = enviar_correo_refaccionamiento(
                 solicitudes
             )
