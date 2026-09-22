@@ -1191,51 +1191,6 @@ def obtener_correos_refacciones():
     return list(correos)
 
 
-def enviar_correo_refaccion(solicitud, foto_bytes=None):
-    destinatarios = obtener_correos_refacciones()
-
-    if not destinatarios:
-        st.warning(
-            "Solicitud guardada, pero no hay correos configurados a cual enviar.")
-        return False
-
-    msg = EmailMessage()
-    msg["Subject"] = f"Solicitud de refacción - {solicitud['refaccion']}"
-    msg["From"] = st.secrets["SMTP_USER"]
-    msg["To"] = ", ".join(destinatarios)
-
-    cuerpo = f"""
-Nueva solicitud de refacción
-
-Supervisor: {solicitud.get('supervisor_nombre') or obtener_nombre_supervisor(solicitud.get('supervisor_email'))}
-
-Refacción a solicitar: {solicitud['refaccion']}
-Número de modelo: {solicitud['numero_modelo']}
-Piezas: {solicitud['piezas']}
-Marca: {solicitud['marca']}
-                    
-"""
-    if solicitud.get("foto_url"):
-        cuerpo += f"\nFoto de referencia: {solicitud['foto_url']}\n"
-
-    msg.set_content(cuerpo)
-
-    if foto_bytes:
-        msg.add_attachment(
-            foto_bytes,
-            maintype="image",
-            subtype="jpeg",
-            filename="foto_refaccion.jpg"
-        )
-
-    with smtplib.SMTP(st.secrets["SMTP_HOST"], int(st.secrets.get("SMTP_PORT", 587))) as smtp:
-        smtp.starttls()
-        smtp.login(st.secrets["SMTP_USER"], st.secrets["SMTP_PASSWORD"])
-        smtp.send_message(msg)
-
-    return True
-
-
 @st.cache_data(ttl=30)
 def cargar_solicitudes_refacciones_supervisor(supervisor_email=None):
     return (
@@ -1346,24 +1301,18 @@ def vista_supervisor_refacciones():
                 "equipo": equipo.strip(),
                 "ubicacion": ubicacion.strip(),
                 "foto_url": foto_url,
+                "estatus": "PENDIENTE",
             }
 
             supabase.table("solicitudes_refacciones").insert(
                 solicitud).execute()
 
-            correo_enviado = enviar_correo_refaccion(
-                solicitud,
-                foto_bytes=foto_bytes
-            )
-
             cargar_solicitudes_refacciones_supervisor.clear()
             cargar_solicitudes_refacciones_admin.clear()
 
-            if correo_enviado:
-                st.success("Solicitud enviada correctamente.")
-            else:
-                st.success(
-                    "Solicitud guardada correctamente, pero no se envío correo.")
+            st.success(
+                "Solicitud enciada al administrador para revisión."
+            )
             st.rerun()
 
     st.markdown("---")
@@ -1418,6 +1367,184 @@ def vista_supervisor_refacciones():
                     st.rerun()
 
 
+def enviar_correo_refaccionamiento(solicitudes):
+    destinatarios = obtener_correos_refacciones()
+
+    if not destinatarios:
+        st.error(
+            "No hay correos configurados a quienes enviar la solicitud."
+        )
+        return False
+
+    if not solicitudes:
+        return False
+
+    msg = EmailMessage()
+
+    cantidad = len(solicitudes)
+
+    msg["Subject"] = (
+        f"Solicitud de refaccionamiento - {cantidad} items"
+    )
+
+    msg["From"] = st.secrets["SMTP_USER"]
+    msg["To"] = ", ".join(destinatarios)
+
+    lineas = [
+        "SOLICITUD DE REFACCIONES",
+        "",
+        f"Total de items: {cantidad}",
+        "",
+    ]
+    for i, solicitud in enumerate(solicitudes, start=1):
+
+        supervisor = (
+            solicitud.get("supervisor_nombre")
+            or obtener_nombre_supervisor(
+                solicitud.get("supervisor_email")
+            )
+        )
+        lineas.extend([
+            f"PARTIDA {i}",
+            f"Refacción: {solicitud.get('refaccion', '')}",
+            f"Cantidad: {solicitud.get('piezas', '')}",
+            f"Marca: {solicitud.get('marca', '')}",
+            f"Modelo: {solicitud.get('numero_modelo', '')}",
+            f"Equipo: {solicitud.get('equipo', '')}",
+            f"Ubicación: {solicitud.get('ubicación', '')}",
+            f"Solicitado por: {supervisor}",
+        ])
+
+        foto_url = solicitud.get("foto_url")
+
+        if (
+            foto_url
+            and str(foto_url).strip().lower()
+            not in ["", "nan", "none", "null"]
+        ):
+            lineas.append(
+                f"Foto de referencia: {foto_url}"
+            )
+        lineas.extend([
+            "",
+            "-----------------------------",
+            ""
+        ])
+
+    msg.set_content(
+        "\n".join(lineas)
+    )
+
+    filas_html = ""
+
+    for i, solicitud in enumerate(solicitudes, start=1):
+
+        supervisor = (
+            solicitud.get("supervisor_nombre")
+            or obtener_nombre_supervisor(
+                solicitud.get("supervisor_email")
+            )
+        )
+
+        foto_url = solicitud.get(foto_url)
+        foto_html = ""
+
+        if (
+            foto_url
+            and str(foto_url).strip().lower()
+            not in ["", "nan", "none", "null"]
+        ):
+            foto_html = (
+                f'<a href="{escape(str(foto_url))}">'
+                f'Ver foto'
+                f'</a>'
+            )
+
+        filas_html += f"""
+        <tr>
+            <td>{i}</td>
+            <td>{escape(str(solicitud.get("refaccion", "")))}</td>
+            <td>{escape(str(solicitud.get("piezas", "")))}</td>
+            <td>{escape(str(solicitud.get("marca", "")))}</td>
+            <td>{escape(str(solicitud.get("numero_modelo", "")))}</td>
+            <td>{escape(str(solicitud.get("equipo", "")))}</td>
+            <td>{escape(str(solicitud.get("ubicacion", "")))}</td>
+            <td>{escape(str(supervisor))}</td>
+            <td>{foto_html}</td>
+        </tr>
+        """
+
+    html = f"""
+    <html>
+    <body style="font-family: Arial, sans-serif;">
+
+        <h2 style="color:#c00000;">
+            Solicitud de refacciones
+        </h2>
+
+        <p>
+            Se solicitan las siguientes
+            <b>{cantidad} partidas</b>:
+        </p>
+
+        <table style="
+            border-collapse: collapse;
+            width: 100%;
+            font-size: 12px;
+        ">
+
+            <thead>
+                <tr style="
+                    background:#c00000;
+                    color:white;
+                ">
+                    <th style="padding:8px;border:1px solid #ddd;">#</th>
+                    <th style="padding:8px;border:1px solid #ddd;">Refacción</th>
+                    <th style="padding:8px;border:1px solid #ddd;">Cant.</th>
+                    <th style="padding:8px;border:1px solid #ddd;">Marca</th>
+                    <th style="padding:8px;border:1px solid #ddd;">Modelo</th>
+                    <th style="padding:8px;border:1px solid #ddd;">Equipo</th>
+                    <th style="padding:8px;border:1px solid #ddd;">Ubicación</th>
+                    <th style="padding:8px;border:1px solid #ddd;">Supervisor</th>
+                    <th style="padding:8px;border:1px solid #ddd;">Foto</th>
+                </tr>
+            </thead>
+
+            <tbody>
+                {filas_html}
+            </tbody>
+
+        </table>
+
+    </body>
+    </html>
+    """
+
+    msg.add_alternative(
+        html,
+        subtype="html"
+    )
+    try:
+        with smtplib.SMTP(
+            st.secrets["SMTP_HOST"],
+            int(st.secrets.get("SMTP_PORT", 587))
+        ) as smtp:
+
+            smtp.starttls()
+            smtp.login(
+                st.secrets["SMTP_USER"],
+                st.secrets["SMTP_PASSWORD"]
+            )
+            smtp.send_message(msg)
+        return True
+
+    except Exception as e:
+        st.error(
+            f"No fue posible enviar el correo: {e}"
+        )
+        return False
+
+
 def vista_admin_refacciones_solicitudes():
     st.subheader("Solicitudes de refacciones")
 
@@ -1427,47 +1554,202 @@ def vista_admin_refacciones_solicitudes():
         st.info("Aun no hay solicitudes de refacciones")
         return
 
-    for _, row in df.iterrows():
-        supervisor_nombre = row.get("supervisor_nombre") or obtener_nombre_supervisor(
-            row.get("supervisor_email"))
-        with st.expander(f"{row['refaccion']} - {row['estatus']} - {supervisor_nombre}"):
-            st.write(f"**Modelo:** {row['numero_modelo']}")
-            st.write(f"**Marca:** {row['marca']}")
-            st.write(f"**Piezas:** {row['piezas']}")
-            st.write(f"**Equipo:** {row['equipo']}")
-            st.write(f"**Ubicacion/Comedor:** {row['ubicacion']}")
-            st.write(f"**Supervisor:** {supervisor_nombre}")
+    if "estatus" not in df.columns:
+        df["estatus"] = "PENDIENTE"
 
-            estatus_actual = row.get("estatus", "PENDIENTE")
-            nuevo_estatus = st.selectbox(
-                "Estatus",
-                ESTATUS_REFACCIONES,
-                index=ESTATUS_REFACCIONES.index(estatus_actual),
-                key=f"estatus_refaccion_{row['id']}"
+    df["estatus"] = (
+        df["estatus"]
+        .fillna("PENDIENTE")
+        .astype(str)
+        .str.upper()
+        .str.strip()
+    )
+
+    pendientes = df[
+        df["estatus"] == "PENDIENTE"
+    ].copy()
+
+    st.markdown("### Pendientes de revisión")
+
+    if pendientes.empty:
+        st.success("No tienes requisiciones pendientes.")
+
+    else:
+        st.caption(
+            f"{len(pendientes)} requisiciones esperando tu aprobacion."
+        )
+
+        pendientes["Enviar"] = False
+
+        columnas_editor = [
+            "Enviar",
+            "refaccion",
+            "piezas",
+            "marca",
+            "numero_modelo",
+            "equipo",
+            "ubicacion",
+            "supervisor_nombre"
+        ]
+
+        columnas_editor = [
+            c
+            for c in columnas_editor
+            if c in pendientes.columns
+        ]
+
+        editado = st.data_editor(
+            pendientes[columnas_editor],
+            use_container_width=True,
+            hide_index=True,
+            disabled=[
+                c
+                for c in columnas_editor
+                if c != "Enviar"
+            ],
+            column_config={
+                "Enviar": st.column_config.CheckboxColumn(
+                    "Enviar",
+                    help="Selecciona las requisiciones que deseas enviar",
+                    default=False
+                ),
+                "refaccion": "Refaccion",
+                "piezas": "Cantidad",
+                "marca": "Marca",
+                "numero_modelo": "Modelo",
+                "equipo": "Equipo",
+                "ubicacion": "Ubicación",
+                "supervisor_nombre": "Supervisor"
+            },
+            key="editor_refacciones_pendientes"
+        )
+
+        seleccion_indices = editado[
+            editado["Enviar"] == True
+        ].index.tolist()
+
+        seleccionadas = pendientes.loc[
+            seleccion_indices
+        ].copy()
+
+        cantidad_seleccionada = len(
+            seleccionadas
+        )
+        st.caption(
+            f"{cantidad_seleccionada} requisiciones seleccionadas"
+        )
+
+        enviar_lote = st.button(
+            f"Enviar seleccionadas por correo ({cantidad_seleccionada})",
+            type="primary",
+            use_container_width=True,
+            disabled=(cantidad_seleccionada == 0),
+            key="enviar_refacciones_lote"
+        )
+
+        if enviar_lote:
+            solicitudes = seleccionadas.to_dict(
+                orient="records"
             )
-
-            comentario = st.text_area(
-                "Comentario admin",
-                value=row.get("comentario_admin") or "",
-                key=f"comentario_refaccion_{row['id']}"
+            correo_ok = enviar_correo_refaccionamiento(
+                solicitudes
             )
+            if correo_ok:
+                ids_enviados = [
+                    str(x["id"])
+                    for x in solicitudes
+                ]
 
-            if st.button("Guardar estatus", key=f"guardar_refaccion_{row['id']}"):
-                supabase.table("solicitudes_refacciones").update({
-                    "estatus": nuevo_estatus,
-                    "comentario_admin": comentario,
-                    "updated_at": datetime.now(timezone.utc).isoformat()
-                }).eq("id", row["id"]).execute()
-
-                if nuevo_estatus == "FINALIZADA":
-                    agregar_refaccion_al_historico(row.to_dict())
+                for solicitud_id in ids_enviados:
+                    supabase.table(
+                        "solicitudes_refacciones"
+                    ).update({
+                        "estatus": "SOLICITADA",
+                        "updated_at": datetime.now(
+                            timezone.utc
+                        ).isoformat()
+                    }).eq(
+                        "id",
+                        solicitud_id
+                    ).execute()
 
                 cargar_solicitudes_refacciones_admin.clear()
                 cargar_solicitudes_refacciones_supervisor.clear()
-                cargar_historico_refacciones.clear()
-                obtener_inventario_refacciones.clear()
-                st.success("Estatus actualizado")
+
+                st.success(
+                    f"{cantidad_seleccionada} requisiciones"
+                    f"enviadas correctamente."
+                )
                 st.rerun()
+
+    st.markdown("---")
+    enviadas = df[
+        df["estatus"] == "SOLICITADA"
+    ].copy()
+
+    with st.expander(
+        f"Refacciones enviadas ({len(enviadas)})",
+        expanded=False
+    ):
+        if enviadas.empty:
+            st.info(
+                "Todavía no hay requisiciones enviadas."
+            )
+        else:
+            for _, row in enviadas.iterrows():
+                supervisor_nombre = (
+                    row.get("supervisor_nombre")
+                    or obtener_nombre_supervisor(
+                        row.get("supervisor_email")
+                    )
+                )
+                with st.container(border=True):
+                    col_info, col_accion = st.columns(
+                        [4, 1]
+                    )
+                    with col_info:
+                        st.write(
+                            f"**{row.get('refaccion', '')}** "
+                            f". {row.get('piezas', '')} pza(s)"
+                        )
+                        st.caption(
+                            f"{row.get('marca', '')} . "
+                            f"{row.get('numero_modelo', '')} . "
+                            f"{row.get('equipo', '')} . "
+                            f"{row.get('ubicacion', '')} . "
+                            f"{supervisor_nombre}"
+                        )
+
+                    with col_accion:
+                        if st.button(
+                            "Finalizar",
+                            key=f"finalizar_ref_{row['id']}",
+                            use_container_width=True
+                        ):
+                            supabase.table(
+                                "solicitudes_refacciones"
+                            ).update({
+                                "estatus": "FINALIZADA",
+                                "updated_at": datetime.now(
+                                    timezone.utc
+                                ).isoformat()
+                            }).eq(
+                                "id",
+                                row['id']
+                            ).execute()
+
+                            agregar_refaccion_al_historico(
+                                row.to_dict()
+                            )
+                            cargar_solicitudes_refacciones_admin.clear()
+                            cargar_solicitudes_refacciones_supervisor.clear()
+                            cargar_historico_refacciones.clear()
+                            obtener_inventario_refacciones.clear()
+
+                            st.success(
+                                "Requisicion finalizada."
+                            )
+                            st.rerun()
 
 
 def agregar_refaccion_al_historico(solicitud):
@@ -2536,432 +2818,6 @@ def mostrar_checklist_arranque(ot_data, solo_lectura=False, fecha_checklist=None
  # -------------------------------------------
 
 
-def vista_operaciones_admin():
-
-    preventivos = cargar_tabla_completa(
-        "preventivos",
-        "*"
-    )
-
-    tecnicos_db = cargar_tabla_completa(
-        "tecnicos",
-        "id,nombre,area,turno_actual,activo"
-    )
-
-    df = pd.DataFrame(preventivos)
-
-    if df.empty:
-        st.info("No hay órdenes de trabajo cargadas.")
-        return
-
-    df_tecnicos = pd.DataFrame(tecnicos_db)
-
-    # ==========================================
-    # ASEGURAR COLUMNAS
-    # ==========================================
-
-    columnas_necesarias = [
-        "numero_ot",
-        "descripcion",
-        "sede",
-        "estatus",
-        "tecnico_id",
-        "created_at",
-        "schedfinish",
-        "fecha_inicio",
-        "fecha_cierre",
-        "jpnum",
-        "pmnum"
-    ]
-
-    for columna in columnas_necesarias:
-        if columna not in df.columns:
-            df[columna] = None
-
-    # ==========================================
-    # AGREGAR DATOS DEL TECNICO
-    # ==========================================
-
-    if not df_tecnicos.empty:
-
-        df_tecnicos = df_tecnicos.rename(
-            columns={
-                "id": "tecnico_id",
-                "nombre": "tecnico",
-                "area": "area_tecnico",
-                "turno_actual": "turno_tecnico"
-            }
-        )
-
-        df = df.merge(
-            df_tecnicos[
-                [
-                    "tecnico_id",
-                    "tecnico",
-                    "area_tecnico",
-                    "turno_tecnico"
-                ]
-            ],
-            on="tecnico_id",
-            how="left"
-        )
-
-    else:
-        df["tecnico"] = "Sin asignar"
-        df["area_tecnico"] = "Sin área"
-        df["turno_tecnico"] = None
-
-    df["tecnico"] = df["tecnico"].fillna("Sin asignar")
-    df["area_tecnico"] = df["area_tecnico"].fillna("Sin área")
-
-    # ==========================================
-    # NORMALIZAR DATOS
-    # ==========================================
-
-    df["estatus"] = (
-        df["estatus"]
-        .fillna("")
-        .astype(str)
-        .str.strip()
-        .str.upper()
-    )
-
-    df["created_at_dt"] = pd.to_datetime(
-        df["created_at"],
-        errors="coerce",
-        utc=True
-    )
-
-    df["schedfinish_dt"] = pd.to_datetime(
-        df["schedfinish"],
-        errors="coerce"
-    )
-
-    hoy = date.today()
-
-    df["vencida"] = (
-        df["estatus"].isin(["PENDIENTE", "EN PROCESO"])
-        & df["schedfinish_dt"].notna()
-        & (df["schedfinish_dt"].dt.date < hoy)
-    )
-
-    # ==========================================
-    # KPIs
-    # ==========================================
-
-    total = len(df)
-
-    pendientes = len(
-        df[df["estatus"] == "PENDIENTE"]
-    )
-
-    proceso = len(
-        df[df["estatus"] == "EN PROCESO"]
-    )
-
-    realizadas = len(
-        df[df["estatus"] == "REALIZADO"]
-    )
-
-    vencidas = int(df["vencida"].sum())
-
-    sin_asignar = len(
-        df[
-            df["tecnico_id"].isna()
-        ]
-    )
-
-    col1, col2, col3, col4, col5, col6 = st.columns(6)
-
-    col1.metric(
-        "OTs",
-        total
-    )
-
-    col2.metric(
-        "Pendientes",
-        pendientes
-    )
-
-    col3.metric(
-        "En proceso",
-        proceso
-    )
-
-    col4.metric(
-        "Realizadas",
-        realizadas
-    )
-
-    col5.metric(
-        "Vencidas",
-        vencidas
-    )
-
-    col6.metric(
-        "Sin asignar",
-        sin_asignar
-    )
-
-    st.markdown("")
-
-    # ==========================================
-    # FILTROS
-    # ==========================================
-
-    with st.container(border=True):
-
-        st.markdown("### Filtros")
-
-        col_buscar, col_estado = st.columns([2, 1])
-
-        with col_buscar:
-
-            busqueda = st.text_input(
-                "Buscar OT, descripción o sede",
-                placeholder="Ej. A87424983, comedor, CLC...",
-                key="operacion_busqueda"
-            )
-
-        with col_estado:
-
-            estados_disponibles = sorted(
-                [
-                    x
-                    for x in df["estatus"].dropna().unique()
-                    if x
-                ]
-            )
-
-            estado_sel = st.multiselect(
-                "Estado",
-                estados_disponibles,
-                key="operacion_estado"
-            )
-
-        col_area, col_tecnico, col_vencidas = st.columns(3)
-
-        with col_area:
-
-            areas = sorted(
-                df["area_tecnico"]
-                .dropna()
-                .unique()
-                .tolist()
-            )
-
-            area_sel = st.multiselect(
-                "Área",
-                areas,
-                key="operacion_area"
-            )
-
-        with col_tecnico:
-
-            nombres_tecnicos = sorted(
-                df["tecnico"]
-                .dropna()
-                .unique()
-                .tolist()
-            )
-
-            tecnico_sel = st.multiselect(
-                "Técnico",
-                nombres_tecnicos,
-                key="operacion_tecnico"
-            )
-
-        with col_vencidas:
-
-            solo_vencidas = st.toggle(
-                "Solo OTs vencidas",
-                key="operacion_vencidas"
-            )
-
-    # ==========================================
-    # APLICAR FILTROS
-    # ==========================================
-
-    df_filtrado = df.copy()
-
-    if busqueda:
-
-        termino = busqueda.strip().lower()
-
-        mascara = (
-            df_filtrado["numero_ot"]
-            .fillna("")
-            .astype(str)
-            .str.lower()
-            .str.contains(termino, na=False)
-            |
-            df_filtrado["descripcion"]
-            .fillna("")
-            .astype(str)
-            .str.lower()
-            .str.contains(termino, na=False)
-            |
-            df_filtrado["sede"]
-            .fillna("")
-            .astype(str)
-            .str.lower()
-            .str.contains(termino, na=False)
-        )
-
-        df_filtrado = df_filtrado[mascara]
-
-    if estado_sel:
-        df_filtrado = df_filtrado[
-            df_filtrado["estatus"].isin(estado_sel)
-        ]
-
-    if area_sel:
-        df_filtrado = df_filtrado[
-            df_filtrado["area_tecnico"].isin(area_sel)
-        ]
-
-    if tecnico_sel:
-        df_filtrado = df_filtrado[
-            df_filtrado["tecnico"].isin(tecnico_sel)
-        ]
-
-    if solo_vencidas:
-        df_filtrado = df_filtrado[
-            df_filtrado["vencida"] == True
-        ]
-
-    # ==========================================
-    # RESULTADOS
-    # ==========================================
-
-    st.markdown("### Órdenes de trabajo")
-
-    st.caption(
-        f"{len(df_filtrado)} registros encontrados"
-    )
-
-    columnas_tabla = [
-        "numero_ot",
-        "descripcion",
-        "sede",
-        "tecnico",
-        "area_tecnico",
-        "turno_tecnico",
-        "estatus",
-        "schedfinish",
-        "vencida"
-    ]
-
-    columnas_tabla = [
-        c
-        for c in columnas_tabla
-        if c in df_filtrado.columns
-    ]
-
-    st.dataframe(
-        df_filtrado[columnas_tabla],
-        use_container_width=True,
-        hide_index=True,
-        column_config={
-            "numero_ot": "OT",
-            "descripcion": "Descripción",
-            "sede": "Sede",
-            "tecnico": "Técnico",
-            "area_tecnico": "Área",
-            "turno_tecnico": "Turno",
-            "estatus": "Estado",
-            "schedfinish": "Fecha programada",
-            "vencida": st.column_config.CheckboxColumn(
-                "Vencida"
-            )
-        }
-    )
-
-    # ==========================================
-    # SELECCIONAR OT
-    # ==========================================
-
-    if df_filtrado.empty:
-        st.info(
-            "No existen órdenes con los filtros seleccionados."
-        )
-        return
-
-    opciones_ot = (
-        df_filtrado["numero_ot"]
-        .dropna()
-        .astype(str)
-        .tolist()
-    )
-
-    ot_sel = st.selectbox(
-        "Selecciona una OT",
-        opciones_ot,
-        key="operacion_ot_seleccionada"
-    )
-
-    fila = df_filtrado[
-        df_filtrado["numero_ot"].astype(str) == ot_sel
-    ]
-
-    if fila.empty:
-        return
-
-    ot = fila.iloc[0]
-
-    # ==========================================
-    # RESUMEN DE OT
-    # ==========================================
-
-    st.markdown("---")
-    st.markdown(f"## OT {ot_sel}")
-
-    col1, col2, col3, col4 = st.columns(4)
-
-    with col1:
-        st.caption("Estado")
-        st.write(
-            f"**{ot.get('estatus', 'Sin estado')}**"
-        )
-
-    with col2:
-        st.caption("Técnico")
-        st.write(
-            f"**{ot.get('tecnico', 'Sin asignar')}**"
-        )
-
-    with col3:
-        st.caption("Área")
-        st.write(
-            f"**{ot.get('area_tecnico', 'Sin área')}**"
-        )
-
-    with col4:
-        st.caption("Sede")
-        st.write(
-            f"**{ot.get('sede') or 'Sin sede'}**"
-        )
-
-    st.write(
-        f"**Descripción:** {ot.get('descripcion') or ''}"
-    )
-
-    if ot.get("jpnum"):
-        st.write(
-            f"**Job Plan:** {ot.get('jpnum')}"
-        )
-
-    if ot.get("pmnum"):
-        st.write(
-            f"**PM:** {ot.get('pmnum')}"
-        )
-
-    if bool(ot.get("vencida")):
-        st.error(
-            "Esta orden está vencida y continúa abierta."
-        )
-
-
 def vista_tecnico_admin(solo_lectura=False):
     st.subheader("Visualizacion modo técnico.")
     col1, col2 = st.columns([1, 2])
@@ -3176,15 +3032,13 @@ def vista_tecnico_admin(solo_lectura=False):
                                     .eq("numero_ot", ot_sel_admin) \
                                     .execute()
 
-                                supabase.table("preventivos_no_asignados").insert({
-                                    "numero_ot": ot_sel_admin,
-                                    "descripcion": fila.iloc[0].get("descripcion", ""),
-                                    "motivo": f"Quitado de {tec_sel_admin['nombre']} por Admin",
-                                    "fecha_carga": datetime.now(timezone.utc).isoformat()
-                                }).execute()
+                                st.session_state.confirmar_reasignacion_ot = None
 
-                                st.session_state.confirmar_quitar_ot = None
-                                st.success("Asignacion quitada correctamente")
+                                st.success(
+                                    f"OT {ot_sel_admin} reasignada correctamente a"
+                                    f"{nuevo_tecnico['nombre']}"
+                                )
+
                                 st.rerun()
 
                         with col_cancelar:
