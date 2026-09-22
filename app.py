@@ -1336,7 +1336,22 @@ def vista_supervisor_refacciones():
                 f"**Modelo:** {sol['numero_modelo']} | **Marca:** {sol['marca']} | **Piezas:** {sol['piezas']}")
             st.write(
                 f"**Equipo:** {sol['equipo']} | **Ubicación:** {sol['ubicacion']}")
-            st.write(f"**Estatus:** {sol['estatus']}")
+            estatus = str(
+                sol.get("estatus") or "PENDIENTE"
+            ).upper()
+
+            if estatus == "PENDIENTE":
+                st.warning(
+                    "🟡 Estatus: Pendiente de revisión por administrador"
+                )
+            elif estatus == "SOLICITADA":
+                st.info(
+                    "🔵 Estatus: Refacción solicitada"
+                )
+            elif estatus == "FINALIZADA":
+                st.success(
+                    "🟢 Estatus: Finalizada"
+                )
 
             comentario_admin = sol.get("comentario_admin")
 
@@ -1581,6 +1596,13 @@ def vista_admin_refacciones_solicitudes():
 
         pendientes["Enviar"] = False
 
+        pendientes["Comentario"] = (
+            pendientes["comentario_admin"]
+            .fillna("")
+            if "comentario_admin" in pendientes.columns
+            else ""
+        )
+
         columnas_editor = [
             "Enviar",
             "refaccion",
@@ -1589,7 +1611,8 @@ def vista_admin_refacciones_solicitudes():
             "numero_modelo",
             "equipo",
             "ubicacion",
-            "supervisor_nombre"
+            "supervisor_nombre",
+            "Comentario"
         ]
 
         columnas_editor = [
@@ -1605,13 +1628,18 @@ def vista_admin_refacciones_solicitudes():
             disabled=[
                 c
                 for c in columnas_editor
-                if c != "Enviar"
+                if c not in ["Enviar", "Comentario"]
             ],
             column_config={
                 "Enviar": st.column_config.CheckboxColumn(
                     "Enviar",
                     help="Selecciona las requisiciones que deseas enviar",
                     default=False
+                ),
+                "Comentario": st.column_config.TextColumn(
+                    "Comentario admin",
+                    help="Este comentario será visible para el supervisor",
+                    width="large"
                 ),
                 "refaccion": "Refaccion",
                 "piezas": "Cantidad",
@@ -1623,6 +1651,64 @@ def vista_admin_refacciones_solicitudes():
             },
             key="editor_refacciones_pendientes"
         )
+
+        col_guardar, col_enviar = st.columns([1, 2])
+
+        with col_guardar:
+            if st.button(
+                "Guardar comentarios",
+                use_container_width=True,
+                key="guardar_comentarios_refacciones"
+            ):
+                cambios = 0
+
+                for idx, fila_editada in editado.iterrows():
+                    solicitud_id = pendientes.loc[idx, "id"]
+
+                    comentario_nuevo = str(
+                        fila_editada.get("Comentario") or ""
+                    ).strip()
+
+                    comentario_actual = str(
+                        pendientes.loc[idx].get("comentario_admin") or ""
+                    ).strip()
+
+                    if comentario_nuevo != comentario_actual:
+                        supabase.table(
+                            "solicitudes_refacciones"
+                        ).update({
+                            "comentario_admin": comentario_nuevo,
+                            "updated_at": datetime.now(
+                                timezone.utc
+                            ).isoformat()
+                        }).eq(
+                            "id",
+                            solicitud_id
+                        ).execute()
+
+                        cambios += 1
+
+                cargar_solicitudes_refacciones_admin.clear()
+                cargar_solicitudes_refacciones_supervisor.clear()
+
+                if cambios:
+                    st.success(
+                        f"{cambios} comentarios guardados."
+                    )
+                else:
+                    st.info(
+                        "No hubo cambios en comentarios."
+                    )
+                st.rerun()
+
+        with col_enviar:
+            enviar_lote = st.button(
+                f"Enviar seleccionadas por correo ({cantidad_seleccionada})",
+                type="primary",
+                use_container_width=True,
+                disabled=(cantidad_seleccionada == 0),
+                key="enviar_refacciones_lote"
+            )
 
         seleccion_indices = editado[
             editado["Enviar"] == True
