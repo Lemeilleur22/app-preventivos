@@ -1801,9 +1801,12 @@ def vista_admin_refacciones_solicitudes():
         df["estatus"] == "SOLICITADA"
     ].copy()
 
+    if "refacciones_enviadas_abiertas" not in st.session_state:
+        st.session_state.refacciones_enviadas_abiertas = False
+
     with st.expander(
         f"Refacciones enviadas ({len(enviadas)})",
-        expanded=False
+        expanded=st.session_state.refacciones_enviadas_abiertas
     ):
         if enviadas.empty:
             st.info(
@@ -1818,14 +1821,15 @@ def vista_admin_refacciones_solicitudes():
                     )
                 )
                 with st.container(border=True):
-                    col_info, col_accion = st.columns(
-                        [4, 1]
+                    col_info, col_ver, col_accion = st.columns(
+                        [4, 1, 1]
                     )
                     with col_info:
                         st.write(
                             f"**{row.get('refaccion', '')}** "
                             f". {row.get('piezas', '')} pza(s)"
                         )
+
                         st.caption(
                             f"{row.get('marca', '')} . "
                             f"{row.get('numero_modelo', '')} . "
@@ -1833,6 +1837,17 @@ def vista_admin_refacciones_solicitudes():
                             f"{row.get('ubicacion', '')} . "
                             f"{supervisor_nombre}"
                         )
+
+                    with col_ver:
+                        if st.button(
+                            "Ver detalle",
+                            key=f"ver_ref{row['id']}",
+                            use_container_width=True
+                        ):
+                            st.session_state.refaccion_detalle_id = str(
+                                row['id']
+                            )
+                            st.session_state.refacciones_enviadas_abiertas = True
 
                     with col_accion:
                         if st.button(
@@ -1860,9 +1875,91 @@ def vista_admin_refacciones_solicitudes():
                             cargar_historico_refacciones.clear()
                             obtener_inventario_refacciones.clear()
 
+                            st.session_state.refacciones_enviadas_abiertas = True
+
                             st.success(
                                 "Requisicion finalizada."
                             )
+                            st.rerun()
+
+                    if (
+                        st.session_state.get("refaccion_detalle_id")
+                        == str(row["id"])
+                    ):
+                        st.markdown("---")
+                        st.markdown("### Detalle de la requisicion")
+
+                        col_datos, col_foto = st.columns([2, 1])
+
+                        with col_datos:
+
+                            st.write(
+                                f"Refaccion:** "
+                                f"{row.get('refaccion', '')}"
+                            )
+                            st.write(
+                                f"Cantidad:** "
+                                f"{row.get('piezas', '')}"
+                            )
+                            st.write(
+                                f"Marca:** "
+                                f"{row.get('marca', '')}"
+                            )
+                            st.write(
+                                f"Modelo:** "
+                                f"{row.get('numero_modelo')}"
+                            )
+                            st.write(
+                                f"Equipo:** "
+                                f"{row.get('equipo', '')}"
+                            )
+                            st.write(
+                                f"Ubicacion** "
+                                f"{row.get('ubicacion', '')}"
+                            )
+                            st.write(
+                                f"Supervisor:** "
+                                f"{supervisor_nombre}"
+                            )
+
+                            comentario = row.get("comentario_admin")
+
+                            if (
+                                comentario
+                                and not pd.isna(comentario)
+                                and str(comentario).strip().lower()
+                                not in ["", "nan", "none", "null"]
+                            ):
+                                st.info(
+                                    f"Comentario admin: {comentario}"
+                                )
+
+                        with col_foto:
+
+                            foto_url = row.get("foto_url")
+
+                            if (
+                                foto_url
+                                and not pd.isna(foto_url)
+                                and str(foto_url).strip().lower()
+                                not in ["", "nan", "none", "null"]
+                            ):
+                                st.image(
+                                    foto_url,
+                                    caption="Fotocargada por el supervisor",
+                                    use_column_width=True
+                                )
+
+                            else:
+                                st.info(
+                                    "El supervisor no cargó fotografía."
+                                )
+
+                        if st.button(
+                            "Cerrar detalle",
+                            key=f"cerrar_detalle_ref{row['id']}"
+                        ):
+                            st.session_state.refaccion_detalle_id = None
                             st.rerun()
 
 
