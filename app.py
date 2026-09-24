@@ -1946,8 +1946,8 @@ def vista_admin_refacciones_solicitudes():
                             ):
                                 st.image(
                                     foto_url,
-                                    caption="Fotocargada por el supervisor",
-                                    use_column_width=True
+                                    caption="Foto cargada por el supervisor",
+                                    width=350
                                 )
 
                             else:
