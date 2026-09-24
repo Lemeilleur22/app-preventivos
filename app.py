@@ -1678,8 +1678,7 @@ def eliminar_solicitud_refaccion_completa(solicitud):
         except Exception as e:
 
             print(
-                f"No fue posible eliminar foto "
-                f"{ruta_foto}: {e}"
+                f"No fue posible eliminar la foto: {e}"
             )
 
     supabase.table(
@@ -1688,6 +1687,26 @@ def eliminar_solicitud_refaccion_completa(solicitud):
         "id",
         solicitud_id
     ).execute()
+
+    comprobacion = (
+        supabase.table(
+            "solicitudes_refacciones"
+        )
+        .select("id")
+        .eq("id", solicitud_id)
+        .execute()
+        .data
+        or []
+    )
+
+    if comprobacion:
+
+        raise RuntimeError(
+            "Supabase no permitió eliminar la solicitud. "
+            "Probablemente una política RLS está bloqueando DELETE."
+        )
+
+    return True
 
 
 def vista_admin_refacciones_solicitudes():
@@ -1997,27 +2016,36 @@ def vista_admin_refacciones_solicitudes():
                     ) or ""
                 ).strip()
 
-                correo_ok = (
-                    enviar_correo_rechazo_refaccion(
-                        solicitud_rechazo,
-                        motivo
-                    )
+                correo_ok = enviar_correo_rechazo_refaccion(
+                    solicitud_rechazo,
+                    motivo
                 )
+
                 if correo_ok:
-                    eliminar_solicitud_refaccion_completa(
-                        solicitud_rechazo
-                    )
-                    cargar_solicitudes_refacciones_admin.clear()
-                    cargar_solicitudes_refacciones_supervisor.clear()
+                    try:
+                        eliminado = (
+                            eliminar_solicitud_refaccion_completa(
+                                solicitud_rechazo
+                            )
+                        )
 
-                    st.success(
-                        "Solicitud rechazada, correo enviado y requisicion eliminada."
-                    )
+                        if eliminado:
+                            cargar_solicitudes_refacciones_admin.clear()
+                            cargar_solicitudes_refacciones_supervisor.clear()
 
-                    st.rerun()
+                            st.success(
+                                "Solicitud rechazada, correo enviado y requisicion eliminada."
+                            )
+
+                            st.rerun()
+                    except Exception as e:
+                        st.error(
+                            f"No fue posible eliminar la requisicion: {e}"
+                        )
+
                 else:
                     st.error(
-                        "No se elimino la requisicion porque el correo no pudo enviarse"
+                        "No se eliminó porque el correo de rechazo no pudo enviarse"
                     )
 
     st.markdown("---")
