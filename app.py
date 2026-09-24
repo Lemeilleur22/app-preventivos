@@ -1583,8 +1583,91 @@ def vista_admin_refacciones_solicitudes():
         .str.strip()
     )
 
-    pendientes = df[
-        df["estatus"] == "PENDIENTE"
+    hoy = date.today()
+    inicio_mes = hoy.replace(day=1)
+
+    rango_refacciones = st.date_input(
+        "Rango de fechas de solicitud",
+        value=(inicio_mes, hoy),
+        key="rango_busqueda_refacciones"
+    )
+
+    termino_refaccion = st.text_input(
+        "Buscar refaccion",
+        placeholder="Ej: termistor, válvula, manguera"
+    )
+
+    df["created_at_dt"] = pd.to_datetime(
+        df["created_at"],
+        errors="coerce",
+        utc=True
+    ).dt.tz_convert(
+        "America/Mexico_City"
+    )
+
+    df_filtrado = df.copy()
+
+    if (
+        isinstance(rango_refacciones, tuple)
+        and len(rango_refacciones) == 2
+    ):
+        fecha_ini, fecha_fin = rango_refacciones
+
+        df_filtrado = df_filtrado[
+            df_filtrado["created_at_dt"]
+            .dt.date
+            .between(
+                fecha_ini,
+                fecha_fin
+            )
+        ]
+
+    if termino_refaccion:
+        termino = termino_refaccion.strip().lower()
+
+        mascara = (
+            df_filtrado["refaccion"]
+            .fillna("")
+            .astype(str)
+            .str.lower()
+            .str.contains(termino, regex=False)
+            |
+            df_filtrado["marca"]
+            .fillna("")
+            .astype(str)
+            .str.lower()
+            .str.contains(termino, regex=False)
+            |
+            df_filtrado["numero_modelo"]
+            .fillna("")
+            .astype(str)
+            .str.lower()
+            .str.contains(termino, regex=False)
+            |
+            df_filtrado["equipo"]
+            .fillna("")
+            .astype(str)
+            .str.lower()
+            .str.contains(termino, regex=False)
+            |
+            df_filtrado["ubicacion"]
+            .fillna("")
+            .astype(str)
+            .str.lower()
+            .str.contains(termino, regex=False)
+            |
+            df_filtrado["supervisor_nombre"]
+            .fillna("")
+            .astype(str)
+            .str.lower()
+            .str.contains(termino, regex=False)
+        )
+        df_filtrado = df_filtrado[
+            mascara
+        ]
+
+    pendientes = df_filtrado[
+        df_filtrado["estatus"] == "PENDIENTE"
     ].copy()
 
     st.markdown("### Pendientes de revisión")
@@ -1797,8 +1880,8 @@ def vista_admin_refacciones_solicitudes():
                 st.rerun()
 
     st.markdown("---")
-    enviadas = df[
-        df["estatus"] == "SOLICITADA"
+    enviadas = df_filtrado[
+        df_filtrado["estatus"] == "SOLICITADA"
     ].copy()
 
     if "refacciones_enviadas_abiertas" not in st.session_state:
