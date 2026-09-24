@@ -108,6 +108,10 @@ load_dotenv()
 SUPABASE_URL = st.secrets["SUPABASE_URL"]
 SUPABASE_KEY = st.secrets["SUPABASE_KEY"]
 
+SUPABASE_SERVICE_ROLE_KEY = st.secrets["SUPABASE_SERVICE_ROLE_KEY"]
+
+supabase_admin = create_client(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
+
 if not SUPABASE_URL or not SUPABASE_KEY:
     st.error("Faltan variables del entorno de Supabase")
     st.stop()
@@ -1669,7 +1673,7 @@ def eliminar_solicitud_refaccion_completa(solicitud):
 
         try:
 
-            supabase.storage.from_(
+            supabase_admin.storage.from_(
                 "refacciones"
             ).remove([
                 ruta_foto
@@ -1678,10 +1682,11 @@ def eliminar_solicitud_refaccion_completa(solicitud):
         except Exception as e:
 
             print(
-                f"No fue posible eliminar la foto: {e}"
+                f"No fue posible eliminar "
+                f"la fotografía: {e}"
             )
 
-    supabase.table(
+    supabase_admin.table(
         "solicitudes_refacciones"
     ).delete().eq(
         "id",
@@ -1689,11 +1694,14 @@ def eliminar_solicitud_refaccion_completa(solicitud):
     ).execute()
 
     comprobacion = (
-        supabase.table(
+        supabase_admin.table(
             "solicitudes_refacciones"
         )
         .select("id")
-        .eq("id", solicitud_id)
+        .eq(
+            "id",
+            solicitud_id
+        )
         .execute()
         .data
         or []
@@ -1702,8 +1710,8 @@ def eliminar_solicitud_refaccion_completa(solicitud):
     if comprobacion:
 
         raise RuntimeError(
-            "Supabase no permitió eliminar la solicitud. "
-            "Probablemente una política RLS está bloqueando DELETE."
+            "La solicitud sigue existiendo "
+            "después del DELETE."
         )
 
     return True
