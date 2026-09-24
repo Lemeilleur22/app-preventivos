@@ -20,6 +20,7 @@ from types import SimpleNamespace
 import plotly.express as px
 from io import BytesIO
 from html import escape
+from email.utils import formataddr
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import landscape, letter
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
@@ -1387,6 +1388,7 @@ def vista_supervisor_refacciones():
 
 
 def enviar_correo_refaccionamiento(solicitudes):
+
     destinatarios = obtener_correos_refacciones()
 
     if not destinatarios:
@@ -1398,24 +1400,37 @@ def enviar_correo_refaccionamiento(solicitudes):
     if not solicitudes:
         return False
 
-    msg = EmailMessage()
-
     cantidad = len(solicitudes)
 
+    msg = EmailMessage()
+
     msg["Subject"] = (
-        f"Solicitud de refaccionamiento - {cantidad} items"
+        f"Solicitud de refaccionamiento - {cantidad} partidas"
     )
 
-    msg["From"] = st.secrets["SMTP_USER"]
+    # Nombre visible del remitente
+    msg["From"] = formataddr((
+        "Sistema de Refaccionamiento IFM",
+        st.secrets["SMTP_USER"]
+    ))
+
     msg["To"] = ", ".join(destinatarios)
+
+    # ==========================================
+    # VERSION TEXTO PLANO
+    # ==========================================
 
     lineas = [
         "SOLICITUD DE REFACCIONES",
         "",
-        f"Total de items: {cantidad}",
-        "",
+        f"Total de partidas: {cantidad}",
+        ""
     ]
-    for i, solicitud in enumerate(solicitudes, start=1):
+
+    for i, solicitud in enumerate(
+        solicitudes,
+        start=1
+    ):
 
         supervisor = (
             solicitud.get("supervisor_nombre")
@@ -1423,16 +1438,16 @@ def enviar_correo_refaccionamiento(solicitudes):
                 solicitud.get("supervisor_email")
             )
         )
+
         lineas.extend([
             f"PARTIDA {i}",
             f"Refacción: {solicitud.get('refaccion', '')}",
             f"Cantidad: {solicitud.get('piezas', '')}",
             f"Marca: {solicitud.get('marca', '')}",
             f"Modelo: {solicitud.get('numero_modelo', '')}",
-            f"Equipo: {solicitud.get('equipo', '')}",
-            f"Ubicación: {solicitud.get('ubicacion', '')}",
             f"Solicitado por: {supervisor}",
-            f"Comentario admin: {solicitud.get('comentario_admin', '')}",
+            f"Comentario admin: "
+            f"{solicitud.get('comentario_admin', '') or ''}",
         ])
 
         foto_url = solicitud.get("foto_url")
@@ -1443,8 +1458,9 @@ def enviar_correo_refaccionamiento(solicitudes):
             not in ["", "nan", "none", "null"]
         ):
             lineas.append(
-                f"Foto de referencia: {foto_url}"
+                f"Foto: {foto_url}"
             )
+
         lineas.extend([
             "",
             "-----------------------------",
@@ -1455,9 +1471,16 @@ def enviar_correo_refaccionamiento(solicitudes):
         "\n".join(lineas)
     )
 
-    filas_html = ""
+    # ==========================================
+    # CONSTRUIR TARJETAS HTML
+    # ==========================================
 
-    for i, solicitud in enumerate(solicitudes, start=1):
+    tarjetas_html = ""
+
+    for i, solicitud in enumerate(
+        solicitudes,
+        start=1
+    ):
 
         supervisor = (
             solicitud.get("supervisor_nombre")
@@ -1466,79 +1489,290 @@ def enviar_correo_refaccionamiento(solicitudes):
             )
         )
 
+        refaccion = escape(
+            str(solicitud.get("refaccion", "") or "")
+        )
+
+        cantidad_item = escape(
+            str(solicitud.get("piezas", "") or "")
+        )
+
+        marca = escape(
+            str(solicitud.get("marca", "") or "")
+        )
+
+        modelo = escape(
+            str(solicitud.get("numero_modelo", "") or "")
+        )
+
+        supervisor_html = escape(
+            str(supervisor or "")
+        )
+
+        comentario = str(
+            solicitud.get("comentario_admin", "")
+            or ""
+        ).strip()
+
+        if comentario:
+            comentario_html = f"""
+            <div style="
+                margin-top:14px;
+                padding:12px 14px;
+                background:#fff7ed;
+                border-left:4px solid #d97706;
+                border-radius:8px;
+                color:#7c2d12;
+                font-size:13px;
+            ">
+                <strong>Comentario del administrador:</strong><br>
+                {escape(comentario)}
+            </div>
+            """
+        else:
+            comentario_html = ""
+
         foto_url = solicitud.get("foto_url")
-        foto_html = ""
 
         if (
             foto_url
             and str(foto_url).strip().lower()
             not in ["", "nan", "none", "null"]
         ):
-            foto_html = (
-                f'<a href="{escape(str(foto_url))}">'
-                f'Ver foto'
-                f'</a>'
-            )
 
-        filas_html += f"""
-        <tr>
-            <td>{i}</td>
-            <td>{escape(str(solicitud.get("refaccion", "")))}</td>
-            <td>{escape(str(solicitud.get("piezas", "")))}</td>
-            <td>{escape(str(solicitud.get("marca", "")))}</td>
-            <td>{escape(str(solicitud.get("numero_modelo", "")))}</td>
-            <td>{escape(str(solicitud.get("equipo", "")))}</td>
-            <td>{escape(str(solicitud.get("ubicacion", "")))}</td>
-            <td>{escape(str(supervisor))}</td>
-            <td>{escape(str(solicitud.get("comentario_admin", "") or ""))}</td>
-            <td>{foto_html}</td>
-        </tr>
+            foto_html = f"""
+            <div style="margin-top:14px;">
+                <a href="{escape(str(foto_url))}"
+                   style="
+                       display:inline-block;
+                       padding:9px 14px;
+                       background:#ffffff;
+                       border:1px solid #d97706;
+                       border-radius:8px;
+                       color:#b45309;
+                       text-decoration:none;
+                       font-size:13px;
+                       font-weight:600;
+                   ">
+                    Ver fotografía
+                </a>
+            </div>
+            """
+
+        else:
+            foto_html = ""
+
+        tarjetas_html += f"""
+        <div style="
+            background:#ffffff;
+            border:1px solid #e5e7eb;
+            border-radius:14px;
+            padding:20px;
+            margin-bottom:16px;
+        ">
+
+            <div style="
+                color:#d97706;
+                font-size:12px;
+                font-weight:700;
+                letter-spacing:1.4px;
+                margin-bottom:7px;
+            ">
+                PARTIDA {i}
+            </div>
+
+            <div style="
+                font-size:17px;
+                font-weight:700;
+                color:#111827;
+                line-height:1.4;
+                margin-bottom:15px;
+            ">
+                {refaccion}
+            </div>
+
+            <table style="
+                width:100%;
+                border-collapse:collapse;
+                font-size:13px;
+                color:#374151;
+            ">
+
+                <tr>
+                    <td style="
+                        width:25%;
+                        padding:6px 0;
+                        color:#6b7280;
+                    ">
+                        Cantidad
+                    </td>
+
+                    <td style="
+                        padding:6px 0;
+                        font-weight:600;
+                    ">
+                        {cantidad_item}
+                    </td>
+                </tr>
+
+                <tr>
+                    <td style="
+                        padding:6px 0;
+                        color:#6b7280;
+                    ">
+                        Marca
+                    </td>
+
+                    <td style="
+                        padding:6px 0;
+                        font-weight:600;
+                    ">
+                        {marca}
+                    </td>
+                </tr>
+
+                <tr>
+                    <td style="
+                        padding:6px 0;
+                        color:#6b7280;
+                    ">
+                        Modelo
+                    </td>
+
+                    <td style="
+                        padding:6px 0;
+                        font-weight:600;
+                    ">
+                        {modelo}
+                    </td>
+                </tr>
+
+                <tr>
+                    <td style="
+                        padding:6px 0;
+                        color:#6b7280;
+                    ">
+                        Supervisor
+                    </td>
+
+                    <td style="
+                        padding:6px 0;
+                        font-weight:600;
+                    ">
+                        {supervisor_html}
+                    </td>
+                </tr>
+
+            </table>
+
+            {comentario_html}
+
+            {foto_html}
+
+        </div>
         """
+
+    # ==========================================
+    # HTML FINAL
+    # ==========================================
 
     html = f"""
     <html>
-    <body style="font-family: Arial, sans-serif;">
 
-        <h2 style="color:#c00000;">
-            Solicitud de refacciones
-        </h2>
+    <body style="
+        margin:0;
+        padding:0;
+        background:#f5f6f8;
+        font-family:Arial, Helvetica, sans-serif;
+        color:#111827;
+    ">
 
-        <p>
-            Se solicitan las siguientes
-            <b>{cantidad} partidas</b>:
-        </p>
-
-        <table style="
-            border-collapse: collapse;
-            width: 100%;
-            font-size: 12px;
+        <div style="
+            max-width:760px;
+            margin:0 auto;
+            padding:36px 20px;
         ">
 
-            <thead>
-                <tr style="
-                    background:#c00000;
-                    color:white;
+            <div style="
+                color:#d97706;
+                font-size:12px;
+                font-weight:700;
+                letter-spacing:2px;
+                margin-bottom:8px;
+            ">
+                SERVICIOS IFM
+            </div>
+
+            <div style="
+                font-size:28px;
+                font-weight:700;
+                color:#111827;
+                margin-bottom:14px;
+            ">
+                Solicitud de refacciones
+            </div>
+
+            <div style="
+                height:4px;
+                background:#d97706;
+                margin-bottom:26px;
+            ">
+            </div>
+
+            <div style="
+                font-size:15px;
+                color:#374151;
+                margin-bottom:24px;
+                line-height:1.6;
+            ">
+                Se ha generado una solicitud de refaccionamiento
+                con <strong>{cantidad} partidas</strong>.
+            </div>
+
+            <div style="
+                background:#fffaf0;
+                border:1px solid #f3d38a;
+                border-radius:14px;
+                padding:18px 20px;
+                margin-bottom:24px;
+            ">
+
+                <div style="
+                    font-size:13px;
+                    color:#92400e;
+                    margin-bottom:5px;
                 ">
-                    <th style="padding:8px;border:1px solid #ddd;">#</th>
-                    <th style="padding:8px;border:1px solid #ddd;">Refacción</th>
-                    <th style="padding:8px;border:1px solid #ddd;">Cant.</th>
-                    <th style="padding:8px;border:1px solid #ddd;">Marca</th>
-                    <th style="padding:8px;border:1px solid #ddd;">Modelo</th>
-                    <th style="padding:8px;border:1px solid #ddd;">Equipo</th>
-                    <th style="padding:8px;border:1px solid #ddd;">Ubicación</th>
-                    <th style="padding:8px;border:1px solid #ddd;">Supervisor</th>
-                    <th style="padding:8px;border:1px solid #ddd;">Comentario admin</th>
-                    <th style="padding:8px;border:1px solid #ddd;">Foto</th>
-                </tr>
-            </thead>
+                    Total de partidas
+                </div>
 
-            <tbody>
-                {filas_html}
-            </tbody>
+                <div style="
+                    font-size:24px;
+                    font-weight:700;
+                    color:#111827;
+                ">
+                    {cantidad}
+                </div>
 
-        </table>
+            </div>
+
+            {tarjetas_html}
+
+            <div style="
+                margin-top:28px;
+                padding-top:18px;
+                border-top:1px solid #e5e7eb;
+                font-size:12px;
+                color:#9ca3af;
+                line-height:1.5;
+            ">
+                Correo generado automáticamente por el
+                Sistema de Refaccionamiento IFM.
+            </div>
+
+        </div>
 
     </body>
+
     </html>
     """
 
@@ -1546,24 +1780,36 @@ def enviar_correo_refaccionamiento(solicitudes):
         html,
         subtype="html"
     )
+
     try:
+
         with smtplib.SMTP(
             st.secrets["SMTP_HOST"],
-            int(st.secrets.get("SMTP_PORT", 587))
+            int(
+                st.secrets.get(
+                    "SMTP_PORT",
+                    587
+                )
+            )
         ) as smtp:
 
             smtp.starttls()
+
             smtp.login(
                 st.secrets["SMTP_USER"],
                 st.secrets["SMTP_PASSWORD"]
             )
+
             smtp.send_message(msg)
+
         return True
 
     except Exception as e:
+
         st.error(
             f"No fue posible enviar el correo: {e}"
         )
+
         return False
 
 
