@@ -1563,6 +1563,133 @@ def enviar_correo_refaccionamiento(solicitudes):
         return False
 
 
+def enviar_correo_rechazo_refaccion(solicitud, motivo=""):
+
+    destinatario = str(
+        solicitud.get("supervisor_email") or ""
+    ).strip()
+
+    if not destinatario:
+        st.error(
+            "La solicitud no tiene correo de supervisor."
+        )
+        return False
+
+    supervisor = (
+        solicitud.get("supervisor_nombre")
+        or obtener_nombre_supervisor(destinatario)
+    )
+
+    refaccion = str(
+        solicitud.get("refaccion") or ""
+    )
+
+    msg = EmailMessage()
+
+    msg["Subject"] = (
+        f"Solicitud de refacción rechazada - {refaccion}"
+    )
+
+    msg["From"] = st.secrets["SMTP_USER"]
+    msg["To"] = destinatario
+
+    cuerpo = (
+        f"Hola {supervisor},\n\n"
+        f"Tu solicitud de refacción fue rechazada.\n\n"
+        f"Refacción: {refaccion}\n"
+        f"Cantidad: {solicitud.get('piezas', '')}\n"
+        f"Marca: {solicitud.get('marca', '')}\n"
+        f"Modelo: {solicitud.get('numero_modelo', '')}\n"
+        f"Equipo: {solicitud.get('equipo', '')}\n"
+        f"Ubicación: {solicitud.get('ubicacion', '')}\n"
+    )
+
+    if motivo:
+        cuerpo += (
+            f"\nMotivo / comentario del administrador:\n"
+            f"{motivo}\n"
+        )
+
+    cuerpo += (
+        "\nLa solicitud fue retirada del sistema."
+    )
+
+    msg.set_content(cuerpo)
+
+    try:
+
+        with smtplib.SMTP(
+            st.secrets["SMTP_HOST"],
+            int(st.secrets.get("SMTP_PORT", 587))
+        ) as smtp:
+
+            smtp.starttls()
+
+            smtp.login(
+                st.secrets["SMTP_USER"],
+                st.secrets["SMTP_PASSWORD"]
+            )
+
+            smtp.send_message(msg)
+
+        return True
+
+    except Exception as e:
+
+        st.error(
+            f"No fue posible enviar el correo de rechazo: {e}"
+        )
+
+        return False
+
+
+def eliminar_solicitud_refaccion_completa(solicitud):
+
+    solicitud_id = str(
+        solicitud.get("id") or ""
+    ).strip()
+
+    if not solicitud_id:
+        raise ValueError(
+            "La solicitud no tiene ID."
+        )
+
+    foto_url = solicitud.get("foto_url")
+
+    if (
+        foto_url
+        and not pd.isna(foto_url)
+        and str(foto_url).strip().lower()
+        not in ["", "nan", "none", "null"]
+    ):
+
+        ruta_foto = (
+            f"{solicitud_id}/foto_refaccion.jpg"
+        )
+
+        try:
+
+            supabase.storage.from_(
+                "refacciones"
+            ).remove([
+                ruta_foto
+            ])
+
+        except Exception as e:
+
+            print(
+                f"No fue posible eliminar foto "
+                f"{ruta_foto}: {e}"
+            )
+
+    supabase.table(
+        "solicitudes_refacciones"
+    ).delete().eq(
+        "id",
+        solicitud_id
+    ).execute()
+
+
 def vista_admin_refacciones_solicitudes():
     st.subheader("Solicitudes de refacciones")
 
@@ -1583,91 +1710,18 @@ def vista_admin_refacciones_solicitudes():
         .str.strip()
     )
 
-    hoy = date.today()
-    inicio_mes = hoy.replace(day=1)
-
-    rango_refacciones = st.date_input(
-        "Rango de fechas de solicitud",
-        value=(inicio_mes, hoy),
-        key="rango_busqueda_refacciones"
-    )
-
-    termino_refaccion = st.text_input(
-        "Buscar refaccion",
-        placeholder="Ej: termistor, válvula, manguera"
-    )
-
-    df["created_at_dt"] = pd.to_datetime(
-        df["created_at"],
-        errors="coerce",
-        utc=True
-    ).dt.tz_convert(
-        "America/Mexico_City"
-    )
-
-    df_filtrado = df.copy()
-
-    if (
-        isinstance(rango_refacciones, tuple)
-        and len(rango_refacciones) == 2
-    ):
-        fecha_ini, fecha_fin = rango_refacciones
-
-        df_filtrado = df_filtrado[
-            df_filtrado["created_at_dt"]
-            .dt.date
-            .between(
-                fecha_ini,
-                fecha_fin
-            )
-        ]
-
-    if termino_refaccion:
-        termino = termino_refaccion.strip().lower()
-
-        mascara = (
-            df_filtrado["refaccion"]
-            .fillna("")
-            .astype(str)
-            .str.lower()
-            .str.contains(termino, regex=False)
-            |
-            df_filtrado["marca"]
-            .fillna("")
-            .astype(str)
-            .str.lower()
-            .str.contains(termino, regex=False)
-            |
-            df_filtrado["numero_modelo"]
-            .fillna("")
-            .astype(str)
-            .str.lower()
-            .str.contains(termino, regex=False)
-            |
-            df_filtrado["equipo"]
-            .fillna("")
-            .astype(str)
-            .str.lower()
-            .str.contains(termino, regex=False)
-            |
-            df_filtrado["ubicacion"]
-            .fillna("")
-            .astype(str)
-            .str.lower()
-            .str.contains(termino, regex=False)
-            |
-            df_filtrado["supervisor_nombre"]
-            .fillna("")
-            .astype(str)
-            .str.lower()
-            .str.contains(termino, regex=False)
+    df["fecha_solicitud"] = (
+        pd.to_datetime(
+            df["created_at"],
+            errors="coerce",
+            utc=True
         )
-        df_filtrado = df_filtrado[
-            mascara
-        ]
+        .dt.tz_convert("America/Mexico_City")
+        .dt.strftime("%d/%m/%Y %H:%M")
+    )
 
-    pendientes = df_filtrado[
-        df_filtrado["estatus"] == "PENDIENTE"
+    pendientes = df[
+        df["estatus"] == "PENDIENTE"
     ].copy()
 
     st.markdown("### Pendientes de revisión")
@@ -1681,6 +1735,7 @@ def vista_admin_refacciones_solicitudes():
         )
 
         pendientes["Enviar"] = False
+        pendientes["Rechazar"] = False
 
         pendientes["Comentario"] = (
             pendientes["comentario_admin"]
@@ -1691,6 +1746,8 @@ def vista_admin_refacciones_solicitudes():
 
         columnas_editor = [
             "Enviar",
+            "Rechazar",
+            "fecha_solicitud",
             "refaccion",
             "piezas",
             "marca",
@@ -1714,7 +1771,7 @@ def vista_admin_refacciones_solicitudes():
             disabled=[
                 c
                 for c in columnas_editor
-                if c not in ["Enviar", "Comentario"]
+                if c not in ["Enviar", "Rechazar", "Comentario"]
             ],
             column_config={
                 "Enviar": st.column_config.CheckboxColumn(
@@ -1726,6 +1783,15 @@ def vista_admin_refacciones_solicitudes():
                     "Comentario admin",
                     help="Este comentario será visible para el supervisor",
                     width="large"
+                ),
+                "fecha_solicitud": st.column_config.TextColumn(
+                    "Solicitada",
+                    width="medium"
+                ),
+                "Rechazar": st.column_config.CheckboxColumn(
+                    "Rechazar",
+                    help="Selecciona una requisicion para rechazarla",
+                    default=False
                 ),
                 "refaccion": "Refaccion",
                 "piezas": "Cantidad",
@@ -1742,6 +1808,26 @@ def vista_admin_refacciones_solicitudes():
             editado["Enviar"] == True
         ].index.tolist()
 
+        rechazo_indices = editado[
+            editado["Rechazar"] == True
+        ].index.tolist()
+
+        cantidad_rechazo = len(
+            rechazo_indices
+        )
+
+        conflictos = set(
+            seleccion_indices
+        ) & set(
+            rechazo_indices
+        )
+
+        if conflictos:
+            st.warning(
+                "Una misma requisicion no puede estar marcada "
+                "como Enviar y Rechazar al mismo tiempo"
+            )
+
         seleccionadas = pendientes.loc[
             seleccion_indices
         ].copy()
@@ -1754,7 +1840,7 @@ def vista_admin_refacciones_solicitudes():
             f"{cantidad_seleccionada} requisiciones seleccionadas"
         )
 
-        col_guardar, col_enviar = st.columns([1, 2])
+        col_guardar, col_rechazar, col_enviar = st.columns([1, 1, 2])
 
         with col_guardar:
 
@@ -1813,6 +1899,17 @@ def vista_admin_refacciones_solicitudes():
 
                 st.rerun()
 
+        with col_rechazar:
+            rechazar_lote = st.button(
+                f"Rechazar ({cantidad_rechazo})",
+                use_container_width=True,
+                disabled=(
+                    cantidad_rechazo == 0
+                    or bool(conflictos)
+                ),
+                key="rechazar_refacciones"
+            )
+
         with col_enviar:
 
             enviar_lote = st.button(
@@ -1820,7 +1917,10 @@ def vista_admin_refacciones_solicitudes():
                 f"({cantidad_seleccionada})",
                 type="primary",
                 use_container_width=True,
-                disabled=(cantidad_seleccionada == 0),
+                disabled=(
+                    cantidad_seleccionada == 0
+                    or bool(conflictos)
+                ),
                 key="enviar_refacciones_lote"
             )
 
@@ -1833,7 +1933,7 @@ def vista_admin_refacciones_solicitudes():
                     editado.loc[idx].get("Comentario") or ""
                 ).strip()
 
-                solicitud["comentario admin"] = comentario
+                solicitud["comentario_admin"] = comentario
                 solicitudes.append(solicitud)
 
                 supabase.table(
@@ -1879,16 +1979,129 @@ def vista_admin_refacciones_solicitudes():
                 )
                 st.rerun()
 
+        if rechazar_lote:
+            if cantidad_rechazo > 1:
+                st.warning(
+                    "Para evitar eliminaciones accidentales, "
+                    "rechaza una requisiscion a la vez."
+                )
+            else:
+                idx = rechazo_indices[0]
+                solicitud = pendientes.loc[
+                    idx
+                ].to_dict()
+
+                motivo = str(
+                    editado.loc[idx].get(
+                        "Comentario"
+                    ) or ""
+                ).strip()
+
+                st.session_state[
+                    "confirmar_rechazo_refaccion"
+                ] = {
+                    "id": str(solicitud["id"]),
+                    "motivo": motivo
+                }
+
+        confirmacion = st.session_state.get(
+            "confirmar_rechazo_refaccion"
+        )
+
+        if confirmacion:
+
+            solicitud_id = confirmacion["id"]
+
+            fila_rechazo = pendientes[
+                pendientes["id"].astype(str)
+                == solicitud_id
+            ]
+
+            if not fila_rechazo.empty:
+
+                solicitud_rechazo = (
+                    fila_rechazo.iloc[0].to_dict()
+                )
+
+                motivo = confirmacion.get(
+                    "motivo",
+                    ""
+                )
+
+                st.warning(
+                    f"¿Confirmas rechazar y eliminar "
+                    f"'{solicitud_rechazo.get('refaccion', '')}'?"
+                )
+
+                if motivo:
+                    st.caption(
+                        f"Motivo: {motivo}"
+                    )
+
+                col_si, col_no = st.columns(2)
+
+                with col_si:
+
+                    if st.button(
+                        "Sí, rechazar y eliminar",
+                        type="primary",
+                        use_container_width=True,
+                        key="confirmar_rechazo_refaccion_btn"
+                    ):
+
+                        # 1. Mandar correo
+                        correo_ok = (
+                            enviar_correo_rechazo_refaccion(
+                                solicitud_rechazo,
+                                motivo
+                            )
+                        )
+
+                        # Solo borrar si el correo sí salió
+                        if correo_ok:
+
+                            eliminar_solicitud_refaccion_completa(
+                                solicitud_rechazo
+                            )
+
+                            cargar_solicitudes_refacciones_admin.clear()
+                            cargar_solicitudes_refacciones_supervisor.clear()
+
+                            st.session_state[
+                                "confirmar_rechazo_refaccion"
+                            ] = None
+
+                            st.success(
+                                "Solicitud rechazada, correo enviado "
+                                "y registro eliminado."
+                            )
+
+                            st.rerun()
+
+                with col_no:
+
+                    if st.button(
+                        "Cancelar",
+                        use_container_width=True,
+                        key="cancelar_rechazo_refaccion_btn"
+                    ):
+
+                        st.session_state[
+                            "confirmar_rechazo_refaccion"
+                        ] = None
+
+                        st.rerun()
+
     st.markdown("---")
-    enviadas = df_filtrado[
-        df_filtrado["estatus"] == "SOLICITADA"
+    enviadas = df[
+        df["estatus"] == "SOLICITADA"
     ].copy()
 
     if "refacciones_enviadas_abiertas" not in st.session_state:
         st.session_state.refacciones_enviadas_abiertas = False
 
     with st.expander(
-        f"Refacciones enviadas ({len(enviadas)})",
+        f"Enviadas / Pendientes de finalizar ({len(enviadas)})",
         expanded=st.session_state.refacciones_enviadas_abiertas
     ):
         if enviadas.empty:
@@ -2044,6 +2257,335 @@ def vista_admin_refacciones_solicitudes():
                         ):
                             st.session_state.refaccion_detalle_id = None
                             st.rerun()
+
+    st.markdown("---")
+    st.markdown("### Histórico de requisiciones")
+
+    st.caption(
+        "Consulta refacciones que ya fueron finalizadas."
+    )
+
+    hoy = date.today()
+    inicio_mes = hoy.replace(day=1)
+
+    rango_refacciones = st.date_input(
+        "Rango de fechas de solicitud",
+        value=(inicio_mes, hoy),
+        key="rango_historico_refacciones"
+    )
+
+    termino_refaccion = st.text_input(
+        "Buscar refacción",
+        placeholder=(
+            "Ej: termistor, válvula, manguera, "
+            "marca, modelo, equipo..."
+        ),
+        key="buscar_historico_refacciones"
+    )
+
+    finalizadas = df[
+        df["estatus"] == "FINALIZADA"
+    ].copy()
+
+    if not finalizadas.empty:
+
+        finalizadas["created_at_dt"] = pd.to_datetime(
+            finalizadas["created_at"],
+            errors="coerce",
+            utc=True
+        ).dt.tz_convert(
+            "America/Mexico_City"
+        )
+
+        if (
+            isinstance(rango_refacciones, tuple)
+            and len(rango_refacciones) == 2
+        ):
+
+            fecha_ini, fecha_fin = rango_refacciones
+
+            finalizadas = finalizadas[
+                finalizadas["created_at_dt"]
+                .dt.date
+                .between(
+                    fecha_ini,
+                    fecha_fin
+                )
+            ]
+
+        if termino_refaccion:
+
+            termino = (
+                termino_refaccion
+                .strip()
+                .lower()
+            )
+
+            mascara = (
+                finalizadas["refaccion"]
+                .fillna("")
+                .astype(str)
+                .str.lower()
+                .str.contains(
+                    termino,
+                    regex=False
+                )
+
+                |
+
+                finalizadas["marca"]
+                .fillna("")
+                .astype(str)
+                .str.lower()
+                .str.contains(
+                    termino,
+                    regex=False
+                )
+
+                |
+
+                finalizadas["numero_modelo"]
+                .fillna("")
+                .astype(str)
+                .str.lower()
+                .str.contains(
+                    termino,
+                    regex=False
+                )
+
+                |
+
+                finalizadas["equipo"]
+                .fillna("")
+                .astype(str)
+                .str.lower()
+                .str.contains(
+                    termino,
+                    regex=False
+                )
+
+                |
+
+                finalizadas["ubicacion"]
+                .fillna("")
+                .astype(str)
+                .str.lower()
+                .str.contains(
+                    termino,
+                    regex=False
+                )
+
+                |
+
+                finalizadas["supervisor_nombre"]
+                .fillna("")
+                .astype(str)
+                .str.lower()
+                .str.contains(
+                    termino,
+                    regex=False
+                )
+            )
+
+            finalizadas = finalizadas[
+                mascara
+            ]
+
+    st.caption(
+        f"{len(finalizadas)} requisiciones encontradas"
+    )
+
+    if finalizadas.empty:
+
+        st.info(
+            "No se encontraron requisiciones finalizadas "
+            "con esos criterios."
+        )
+
+    else:
+
+        for _, row in finalizadas.iterrows():
+
+            supervisor_nombre = (
+                row.get("supervisor_nombre")
+                or obtener_nombre_supervisor(
+                    row.get("supervisor_email")
+                )
+            )
+
+            with st.container(border=True):
+
+                col_info, col_ver = st.columns(
+                    [5, 1]
+                )
+
+                with col_info:
+
+                    st.write(
+                        f"**{row.get('refaccion', '')}** "
+                        f"· {row.get('piezas', '')} pza(s)"
+                    )
+
+                    fecha_solicitud = pd.to_datetime(
+                        row.get("created_at"),
+                        errors="coerce",
+                        utc=True
+                    )
+
+                    if pd.notna(fecha_solicitud):
+
+                        fecha_solicitud = (
+                            fecha_solicitud
+                            .tz_convert(
+                                "America/Mexico_City"
+                            )
+                            .strftime(
+                                "%d/%m/%Y %H:%M"
+                            )
+                        )
+
+                    else:
+                        fecha_solicitud = "Sin fecha"
+
+                    st.caption(
+                        f"Solicitada: {fecha_solicitud} · "
+                        f"{row.get('marca', '')} · "
+                        f"{row.get('numero_modelo', '')} · "
+                        f"{row.get('equipo', '')} · "
+                        f"{row.get('ubicacion', '')} · "
+                        f"{supervisor_nombre}"
+                    )
+
+                with col_ver:
+
+                    if st.button(
+                        "Ver detalle",
+                        key=f"ver_finalizada_{row['id']}",
+                        use_container_width=True
+                    ):
+
+                        if (
+                            st.session_state.get(
+                                "refaccion_finalizada_detalle"
+                            )
+                            == str(row["id"])
+                        ):
+                            st.session_state[
+                                "refaccion_finalizada_detalle"
+                            ] = None
+                        else:
+                            st.session_state[
+                                "refaccion_finalizada_detalle"
+                            ] = str(row["id"])
+
+                        st.rerun()
+
+                if (
+                    st.session_state.get(
+                        "refaccion_finalizada_detalle"
+                    )
+                    == str(row["id"])
+                ):
+
+                    st.markdown("---")
+
+                    col_datos, col_foto = st.columns(
+                        [2, 1]
+                    )
+
+                    with col_datos:
+
+                        st.write(
+                            f"**Refacción:** "
+                            f"{row.get('refaccion', '')}"
+                        )
+
+                        st.write(
+                            f"**Cantidad:** "
+                            f"{row.get('piezas', '')}"
+                        )
+
+                        st.write(
+                            f"**Marca:** "
+                            f"{row.get('marca', '')}"
+                        )
+
+                        st.write(
+                            f"**Modelo:** "
+                            f"{row.get('numero_modelo', '')}"
+                        )
+
+                        st.write(
+                            f"**Equipo:** "
+                            f"{row.get('equipo', '')}"
+                        )
+
+                        st.write(
+                            f"**Ubicación:** "
+                            f"{row.get('ubicacion', '')}"
+                        )
+
+                        st.write(
+                            f"**Supervisor:** "
+                            f"{supervisor_nombre}"
+                        )
+
+                        comentario = row.get(
+                            "comentario_admin"
+                        )
+
+                        if (
+                            comentario
+                            and not pd.isna(comentario)
+                            and str(comentario)
+                            .strip()
+                            .lower()
+                            not in [
+                                "",
+                                "nan",
+                                "none",
+                                "null"
+                            ]
+                        ):
+                            st.info(
+                                f"Comentario admin: "
+                                f"{comentario}"
+                            )
+
+                    with col_foto:
+
+                        foto_url = row.get(
+                            "foto_url"
+                        )
+
+                        if (
+                            foto_url
+                            and not pd.isna(foto_url)
+                            and str(foto_url)
+                            .strip()
+                            .lower()
+                            not in [
+                                "",
+                                "nan",
+                                "none",
+                                "null"
+                            ]
+                        ):
+
+                            st.image(
+                                foto_url,
+                                caption=(
+                                    "Foto cargada por "
+                                    "el supervisor"
+                                ),
+                                width=350
+                            )
+
+                        else:
+
+                            st.info(
+                                "Sin fotografía."
+                            )
 
 
 def agregar_refaccion_al_historico(solicitud):
