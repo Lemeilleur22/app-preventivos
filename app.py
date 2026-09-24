@@ -1987,7 +1987,7 @@ def vista_admin_refacciones_solicitudes():
                 )
             else:
                 idx = rechazo_indices[0]
-                solicitud = pendientes.loc[
+                solicitud_rechazo = pendientes.loc[
                     idx
                 ].to_dict()
 
@@ -1997,100 +1997,28 @@ def vista_admin_refacciones_solicitudes():
                     ) or ""
                 ).strip()
 
-                st.session_state[
-                    "confirmar_rechazo_refaccion"
-                ] = {
-                    "id": str(solicitud["id"]),
-                    "motivo": motivo
-                }
-
-        confirmacion = st.session_state.get(
-            "confirmar_rechazo_refaccion"
-        )
-
-        if confirmacion:
-
-            solicitud_id = confirmacion["id"]
-
-            fila_rechazo = pendientes[
-                pendientes["id"].astype(str)
-                == solicitud_id
-            ]
-
-            if not fila_rechazo.empty:
-
-                solicitud_rechazo = (
-                    fila_rechazo.iloc[0].to_dict()
+                correo_ok = (
+                    enviar_correo_rechazo_refaccion(
+                        solicitud_rechazo,
+                        motivo
+                    )
                 )
+                if correo_ok:
+                    eliminar_solicitud_refaccion_completa(
+                        solicitud_rechazo
+                    )
+                    cargar_solicitudes_refacciones_admin.clear()
+                    cargar_solicitudes_refacciones_supervisor.clear()
 
-                motivo = confirmacion.get(
-                    "motivo",
-                    ""
-                )
-
-                st.warning(
-                    f"¿Confirmas rechazar y eliminar "
-                    f"'{solicitud_rechazo.get('refaccion', '')}'?"
-                )
-
-                if motivo:
-                    st.caption(
-                        f"Motivo: {motivo}"
+                    st.success(
+                        "Solicitud rechazada, correo enviado y requisicion eliminada."
                     )
 
-                col_si, col_no = st.columns(2)
-
-                with col_si:
-
-                    if st.button(
-                        "Sí, rechazar y eliminar",
-                        type="primary",
-                        use_container_width=True,
-                        key="confirmar_rechazo_refaccion_btn"
-                    ):
-
-                        # 1. Mandar correo
-                        correo_ok = (
-                            enviar_correo_rechazo_refaccion(
-                                solicitud_rechazo,
-                                motivo
-                            )
-                        )
-
-                        # Solo borrar si el correo sí salió
-                        if correo_ok:
-
-                            eliminar_solicitud_refaccion_completa(
-                                solicitud_rechazo
-                            )
-
-                            cargar_solicitudes_refacciones_admin.clear()
-                            cargar_solicitudes_refacciones_supervisor.clear()
-
-                            st.session_state[
-                                "confirmar_rechazo_refaccion"
-                            ] = None
-
-                            st.success(
-                                "Solicitud rechazada, correo enviado "
-                                "y registro eliminado."
-                            )
-
-                            st.rerun()
-
-                with col_no:
-
-                    if st.button(
-                        "Cancelar",
-                        use_container_width=True,
-                        key="cancelar_rechazo_refaccion_btn"
-                    ):
-
-                        st.session_state[
-                            "confirmar_rechazo_refaccion"
-                        ] = None
-
-                        st.rerun()
+                    st.rerun()
+                else:
+                    st.error(
+                        "No se elimino la requisicion porque el correo no pudo enviarse"
+                    )
 
     st.markdown("---")
     enviadas = df[
