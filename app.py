@@ -1142,31 +1142,11 @@ def asignar_fechas_visibles_preventivos(nuevos, dias_laborales=7):
     if not nuevos:
         return nuevos
 
-    hoy = date.today()
-    lunes = hoy - timedelta(days=hoy.weekday())
-
-    dias = [
-        lunes + timedelta(days=i)
-        for i in range(dias_laborales)
-    ]
-
-    por_tecnico = {}
+    hoy = date.today().isoformat()
 
     for ot in nuevos:
-        tecnico_id = ot.get("tecnico_id")
+        ot["fecha_visible_tecnico"] = hoy
 
-        if not tecnico_id:
-            continue
-        por_tecnico.setdefault(str(tecnico_id), []).append(ot)
-
-    for _, ots in por_tecnico.items():
-        ots.sort(key=lambda x: (
-            str(x.get("schedfinish") or ""),
-            str(x.get("numero_ot") or "")
-        ))
-
-        for i, ot in enumerate(ots):
-            ot["fecha_visible_tecnico"] = dias[i % len(dias)].isoformat()
     return nuevos
 
 
