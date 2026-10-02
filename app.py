@@ -1385,7 +1385,7 @@ def enviar_correo_refaccionamiento(solicitudes):
     msg = EmailMessage()
 
     msg["Subject"] = (
-        f"Solicitud de refaccionamiento - {cantidad} partidas"
+        f"Solicitud de refaccionamiento - {cantidad} refacciones"
     )
 
     # Nombre visible del remitente
@@ -1403,7 +1403,7 @@ def enviar_correo_refaccionamiento(solicitudes):
     lineas = [
         "SOLICITUD DE REFACCIONES",
         "",
-        f"Total de partidas: {cantidad}",
+        f"Total de refacciones: {cantidad}",
         ""
     ]
 
