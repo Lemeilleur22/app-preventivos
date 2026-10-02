@@ -1420,7 +1420,7 @@ def enviar_correo_refaccionamiento(solicitudes):
         )
 
         lineas.extend([
-            f"PARTIDA {i}",
+            f"REFACCION {i}",
             f"Refacción: {solicitud.get('refaccion', '')}",
             f"Cantidad: {solicitud.get('piezas', '')}",
             f"Marca: {solicitud.get('marca', '')}",
@@ -1558,7 +1558,7 @@ def enviar_correo_refaccionamiento(solicitudes):
                 letter-spacing:1.4px;
                 margin-bottom:7px;
             ">
-                PARTIDA {i}
+                REFACCION {i}
             </div>
 
             <div style="
@@ -1706,7 +1706,7 @@ def enviar_correo_refaccionamiento(solicitudes):
                 line-height:1.6;
             ">
                 Se ha generado una solicitud de refaccionamiento
-                con <strong>{cantidad} partidas</strong>.
+                con <strong>{cantidad} refaccion</strong>.
             </div>
 
             <div style="
@@ -1722,7 +1722,7 @@ def enviar_correo_refaccionamiento(solicitudes):
                     color:#92400e;
                     margin-bottom:5px;
                 ">
-                    Total de partidas
+                    Total de refacciones
                 </div>
 
                 <div style="
