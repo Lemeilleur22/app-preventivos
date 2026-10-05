@@ -5044,6 +5044,101 @@ if modo == "Admin":
                         key="btn_roles"
                     )
 
+        st.markdown("<br>", unsafe_allow_html=True)
+
+        with st.container(border=True):
+
+            st.subheader("Carga OTs Dashboard")
+
+            st.caption(
+                "Carga mensual del archivo List of Work Orders "
+                "para el Dashboard de Mantenimiento."
+            )
+
+            archivo_ots_dashboard = st.file_uploader(
+                "Seleccionar archivo XLSX",
+                type=["xlsx"],
+                key="archivo_ots_dashboard"
+            )
+            if archivo_ots_dashboard is not None:
+                try:
+                    archivo_ots_dashboard.seek(0)
+
+                    df_ots_dashboard = pd.read_excel(
+                        archivo_ots_dashboard,
+                        sheet_name="List of Work Orders",
+                        engine="openpyxl"
+                    )
+
+                    df_ots_dashboard.columns = (
+                        df_ots_dashboard.columns
+                        .astype(str)
+                        .str.strip()
+                    )
+
+                    st.success(
+                        "Archivo leido correctamente."
+                    )
+
+                    col_ot1, col_ot2, col_ot3 = st.columns(3)
+
+                    with col_ot1:
+                        st.metric(
+                            "Filas",
+                            len(df_ots_dashboard)
+                        )
+
+                    with col_ot2:
+                        if "Work Order" in df_ots_dashboard.columns:
+                            ots_unicas = (
+                                df_ots_dashboard["Work Order"]
+                                .astype(str)
+                                .nunique()
+                            )
+                        else:
+                            ots_unicas = 0
+
+                        st.metric(
+                            "OTs unicas",
+                            ots_unicas
+                        )
+
+                    with col_ot3:
+                        if "Work Order" in df_ots_dashboard.columns:
+                            duplicadas = (
+                                df_ots_dashboard["Work Order"]
+                                .astype(str)
+                                .duplicated()
+                                .sum()
+                            )
+                        else:
+                            duplicadas = 0
+
+                        st.metric(
+                            "Duplicadas",
+                            duplicadas
+                        )
+
+                    st.markdown("### Vista Previa")
+                    st.dataframe(
+                        df_ots_dashboard.head(10),
+                        use_container_width=True,
+                        hide_index=True
+                    )
+
+                    st.markdown("### Columnas detectadas")
+
+                    st.write(
+                        df_ots_dashboard.columns.tolist()
+                    )
+
+                except Exception as e:
+
+                    st.error(
+                        "No fue posible leer el archivo"
+                    )
+                    st.exception(e)
+
         if archivo and not (cargar_prev or actualizar_fechas or actualizar_sedes):
             st.info("Archivo cargado. Selecciona una opción.")
         if archivo and (cargar_prev or actualizar_fechas or actualizar_sedes):
