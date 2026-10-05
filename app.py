@@ -1942,6 +1942,242 @@ def eliminar_solicitud_refaccion_completa(solicitud):
 
     return True
 
+# ==========================================
+# OTs DASHBOARD - MISMA LOGICA DEL IMPORTADOR
+# ==========================================
+
+
+ANIO_OTS_DASHBOARD = 2026
+
+MESES_OTS_DASHBOARD = {
+    "ENERO": 1,
+    "FEBRERO": 2,
+    "MARZO": 3,
+    "ABRIL": 4,
+    "MAYO": 5,
+    "JUNIO": 6,
+    "JULIO": 7,
+    "AGOSTO": 8,
+    "SEPTIEMBRE": 9,
+    "OCTUBRE": 10,
+    "NOVIEMBRE": 11,
+    "DICIEMBRE": 12,
+}
+
+
+def limpiar_ot_dashboard(valor):
+    if pd.isna(valor):
+        return None
+
+    texto = str(valor).strip()
+
+    if texto.upper() in [
+        "",
+        "NAN",
+        "NONE",
+        "NULL"
+    ]:
+        return None
+
+    return texto
+
+
+def detectar_mes_ot_dashboard(nombre_archivo):
+    nombre = nombre_archivo.upper()
+
+    for mes_nombre, mes_num in MESES_OTS_DASHBOARD.items():
+        if mes_nombre in nombre:
+            return mes_nombre, mes_num
+
+    raise ValueError(
+        f"No se pudo detectar el mes "
+        f"en {nombre_archivo}. "
+        f"Usa nombres como OTS SEPTIEMBRE.xlsx"
+    )
+
+
+def clasificar_area_pcon_dashboard(texto):
+    texto = str(texto or "").upper()
+
+    if "IFSI" in texto:
+        return "SCI"
+
+    if "IFCO" in texto:
+        return "COMEDORES"
+
+    if "IFDE" in texto:
+        return "DESASOLVE"
+
+    if "IFTE" in texto:
+        return "TECHOS"
+
+    if "IFFA" in texto:
+        return "CONSERVACION"
+
+    return "VIAS"
+
+
+def convertir_fecha_ot_dashboard(valor):
+    if pd.isna(valor):
+        return None
+
+    fecha = pd.to_datetime(
+        valor,
+        errors="coerce"
+    )
+
+    if pd.isna(fecha):
+        return None
+
+    return fecha.date().isoformat()
+
+
+def preparar_ots_dashboard(archivo):
+    # Detectar mes exactamente como antes,
+    # pero usando el nombre del archivo subido.
+    mes_nombre, mes_num = detectar_mes_ot_dashboard(
+        archivo.name
+    )
+
+    archivo.seek(0)
+
+    df = pd.read_excel(
+        archivo,
+        engine="openpyxl"
+    )
+
+    df.columns = (
+        df.columns
+        .astype(str)
+        .str.strip()
+        .str.upper()
+    )
+
+    columnas_necesarias = [
+        "WORK ORDER",
+        "DESCRIPTION",
+        "PCON LOCATION",
+        "SCHEDULED FINISH",
+        "WORK TYPE",
+        "STATUS",
+    ]
+
+    faltantes = [
+        columna
+        for columna in columnas_necesarias
+        if columna not in df.columns
+    ]
+
+    if faltantes:
+        raise RuntimeError(
+            f"{archivo.name} no contiene "
+            f"estas columnas: {faltantes}"
+        )
+
+    registros = []
+
+    for _, fila in df.iterrows():
+
+        numero_ot = limpiar_ot_dashboard(
+            fila.get("WORK ORDER")
+        )
+
+        if not numero_ot:
+            continue
+
+        numero_ot = numero_ot.upper()
+
+        descripcion = limpiar_ot_dashboard(
+            fila.get("DESCRIPTION")
+        )
+
+        pcon_location = limpiar_ot_dashboard(
+            fila.get("PCON LOCATION")
+        )
+
+        registro = {
+            "numero_ot": numero_ot,
+
+            "descripcion":
+                descripcion,
+
+            "pcon_location":
+                pcon_location,
+
+            "area":
+                clasificar_area_pcon_dashboard(
+                    pcon_location
+                ),
+
+            "sede": None,
+
+            "scheduled_finish":
+                convertir_fecha_ot_dashboard(
+                    fila.get(
+                        "SCHEDULED FINISH"
+                    )
+                ),
+
+            "jpnum": None,
+
+            "pmnum": None,
+
+            "worktype":
+                limpiar_ot_dashboard(
+                    fila.get(
+                        "WORK TYPE"
+                    )
+                ),
+
+            "estatus":
+                limpiar_ot_dashboard(
+                    fila.get(
+                        "STATUS"
+                    )
+                ),
+
+            # Igual que antes:
+            # el mes viene del nombre
+            # del archivo.
+            "mes":
+                mes_num,
+
+            "anio":
+                ANIO_OTS_DASHBOARD,
+        }
+
+        registros.append(
+            registro
+        )
+
+    # ======================================
+    # VALIDAR DUPLICADOS
+    # ======================================
+
+    numeros_ot = [
+        r["numero_ot"]
+        for r in registros
+    ]
+
+    total = len(numeros_ot)
+
+    unicos = len(
+        set(numeros_ot)
+    )
+
+    if total != unicos:
+        raise RuntimeError(
+            "Se detectaron OTs duplicadas. "
+            "Carga cancelada."
+        )
+
+    return (
+        registros,
+        mes_nombre,
+        total,
+        df
+    )
+
 
 def vista_admin_refacciones_solicitudes():
     st.subheader("Solicitudes de refacciones")
@@ -5124,12 +5360,6 @@ if modo == "Admin":
                         df_ots_dashboard.head(10),
                         use_container_width=True,
                         hide_index=True
-                    )
-
-                    st.markdown("### Columnas detectadas")
-
-                    st.write(
-                        df_ots_dashboard.columns.tolist()
                     )
 
                 except Exception as e:
