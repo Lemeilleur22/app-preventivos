@@ -1943,6 +1943,60 @@ def eliminar_solicitud_refaccion_completa(solicitud):
     return True
 
 
+ANIO_OTS_DASHBOARD = 2026
+
+
+def detectar_mes_ot_dashboard(nombre_archivo):
+    nombre = str(nombre_archivo).upper()
+
+    meses = [
+        ("SEPTIEMBRE", "SEPTIEMBRE", 9),
+        ("SEPT", "SEPTIEMBRE", 9),
+        ("SEP", "SEPTIEMBRE", 9),
+
+        ("ENERO", "ENERO", 1),
+        ("ENE", "ENERO", 1),
+
+        ("FEBRERO", "FEBRERO", 2),
+        ("FEB", "FEBRERO", 2),
+
+        ("MARZO", "MARZO", 3),
+        ("MAR", "MARZO", 3),
+
+        ("ABRIL", "ABRIL", 4),
+        ("ABR", "ABRIL", 4),
+
+        ("MAYO", "MAYO", 5),
+        ("MAY", "MAYO", 5),
+
+        ("JUNIO", "JUNIO", 6),
+        ("JUN", "JUNIO", 6),
+
+        ("JULIO", "JULIO", 7),
+        ("JUL", "JULIO", 7),
+
+        ("AGOSTO", "AGOSTO", 8),
+        ("AGO", "AGOSTO", 8),
+
+        ("OCTUBRE", "OCTUBRE", 10),
+        ("OCT", "OCTUBRE", 10),
+
+        ("NOVIEMBRE", "NOVIEMBRE", 11),
+        ("NOV", "NOVIEMBRE", 11),
+
+        ("DICIEMBRE", "DICIEMBRE", 12),
+        ("DIC", "DICIEMBRE", 12),
+    ]
+
+    for texto, nombre_mes, numero_mes in meses:
+        if texto in nombre:
+            return nombre_mes, numero_mes
+
+    raise ValueError(
+        f"No se pudo detectar el mes en {nombre_archivo}"
+    )
+
+
 def limpiar_ot_dashboard(valor):
     if pd.isna(valor):
         return None
@@ -1997,6 +2051,14 @@ def convertir_fecha_ot_dashboard(valor):
 
 
 def preparar_ots_dashboard(archivo):
+
+    # ======================================
+    # MES SEGÚN NOMBRE DEL ARCHIVO
+    # ======================================
+
+    mes_nombre, mes_num = detectar_mes_ot_dashboard(
+        archivo.name
+    )
 
     archivo.seek(0)
 
@@ -2054,50 +2116,6 @@ def preparar_ots_dashboard(archivo):
             fila.get("PCON LOCATION")
         )
 
-        # ======================================
-        # FECHA PROGRAMADA
-        # ======================================
-
-        valor_fecha = fila.get(
-            "SCHEDULED FINISH"
-        )
-
-        if isinstance(
-            valor_fecha,
-            (pd.Timestamp, datetime, date)
-        ):
-            fecha_programada = pd.Timestamp(
-                valor_fecha
-            )
-        else:
-            fecha_programada = pd.to_datetime(
-                valor_fecha,
-                errors="coerce",
-                dayfirst=True
-            )
-
-        if pd.isna(fecha_programada):
-            raise RuntimeError(
-                f"La OT {numero_ot} no tiene "
-                f"un Scheduled Finish válido."
-            )
-
-        scheduled_finish = (
-            fecha_programada
-            .date()
-            .isoformat()
-        )
-
-        # EL MES Y EL AÑO SALEN DE
-        # SCHEDULED FINISH
-        mes_num = int(
-            fecha_programada.month
-        )
-
-        anio_num = int(
-            fecha_programada.year
-        )
-
         registro = {
             "numero_ot":
                 numero_ot,
@@ -2117,7 +2135,11 @@ def preparar_ots_dashboard(archivo):
                 None,
 
             "scheduled_finish":
-                scheduled_finish,
+                convertir_fecha_ot_dashboard(
+                    fila.get(
+                        "SCHEDULED FINISH"
+                    )
+                ),
 
             "jpnum":
                 None,
@@ -2139,11 +2161,13 @@ def preparar_ots_dashboard(archivo):
                     )
                 ),
 
+            # IMPORTANTE:
+            # MES DEL NOMBRE DEL ARCHIVO
             "mes":
                 mes_num,
 
             "anio":
-                anio_num,
+                ANIO_OTS_DASHBOARD,
         }
 
         registros.append(
@@ -2173,6 +2197,7 @@ def preparar_ots_dashboard(archivo):
 
     return (
         registros,
+        mes_nombre,
         total,
         df
     )
@@ -5300,6 +5325,7 @@ if modo == "Admin":
 
                     (
                         registros_dashboard,
+                        mes_nombre_dashboard,
                         total_dashboard,
                         df_ots_dashboard
                     ) = preparar_ots_dashboard(
@@ -5308,29 +5334,6 @@ if modo == "Admin":
 
                     df_periodos = pd.DataFrame(
                         registros_dashboard
-                    )
-
-                    resumen_periodos = (
-                        df_periodos
-                        .groupby(
-                            ["anio", "mes"]
-                        )
-                        .size()
-                        .reset_index(
-                            name="OTs"
-                        )
-                    )
-                    resumen_periodos["MES"] = (
-                        resumen_periodos["mes"]
-                        .map(MESES_CORTOS)
-                    )
-
-                    st.dataframe(
-                        resumen_periodos[
-                            ["anio", "MES", "OTs"]
-                        ],
-                        use_container_width=True,
-                        hide_index=True
                     )
 
                     periodos_dashboard = sorted(
@@ -5355,7 +5358,7 @@ if modo == "Admin":
 
                     st.info(
                         f"Periodo detectado: "
-                        f"Scheduled finish: "
+                        f"{mes_nombre_dashboard} "
                         f"{texto_periodos}"
                     )
 
