@@ -5395,8 +5395,6 @@ if modo == "Admin":
                         f"Se sincronizarán "
                         f"{total_dashboard} OTs "
                         f"con el Dashboard. "
-                        f"Los meses y años se obtuvieron "
-                        f"de Scheduled Finish."
                     )
 
                     sincronizar_ots_dashboard = st.button(
