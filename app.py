@@ -5326,7 +5326,7 @@ if modo == "Admin":
                     )
 
                     st.dataframe(
-                        resumen_periodos["MES"["anio", "MES", "OTs"]
+                        resumen_periodos[["anio", "MES", "OTs"]
                                          ],
                         use_container_width=True,
                         hide_index=True
