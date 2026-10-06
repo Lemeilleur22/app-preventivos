@@ -5306,6 +5306,32 @@ if modo == "Admin":
                         archivo_ots_dashboard
                     )
 
+                    df_periodos = pd.DataFrame(
+                        registros_dashboard
+                    )
+
+                    resumen_periodos = (
+                        df_periodos
+                        .groupby(
+                            ["anio", "mes"]
+                        )
+                        .size()
+                        .reset_index(
+                            name="OTS"
+                        )
+                    )
+                    resumen_periodos["MES"] = (
+                        resumen_periodos["mes"]
+                        .map(MESES_CORTOS)
+                    )
+
+                    st.dataframe(
+                        resumen_periodos["MES"["anio", "MES", "OTs"]
+                                         ],
+                        use_container_width=True,
+                        hide_index=True
+                    )
+
                     periodos_dashboard = sorted(
                         {
                             (
