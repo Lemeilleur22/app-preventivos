@@ -5317,7 +5317,7 @@ if modo == "Admin":
                         )
                         .size()
                         .reset_index(
-                            name="OTS"
+                            name="OTs"
                         )
                     )
                     resumen_periodos["MES"] = (
