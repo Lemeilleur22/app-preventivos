@@ -2058,10 +2058,23 @@ def preparar_ots_dashboard(archivo):
         # FECHA PROGRAMADA
         # ======================================
 
-        fecha_programada = pd.to_datetime(
-            fila.get("SCHEDULED FINISH"),
-            errors="coerce"
+        valor_fecha = fila.get(
+            "SCHEDULED FINISH"
         )
+
+        if isinstance(
+            valor_fecha,
+            (pd.Timestamp, datetime, date)
+        ):
+            fecha_programada = pd.Timestamp(
+                valor_fecha
+            )
+        else:
+            fecha_programada = pd.to_datetime(
+                valor_fecha,
+                errors="coerce",
+                dayfirst=True
+            )
 
         if pd.isna(fecha_programada):
             raise RuntimeError(
