@@ -5298,22 +5298,24 @@ if modo == "Admin":
             )
             if archivo_ots_dashboard is not None:
                 try:
-                    archivo_ots_dashboard.seek(0)
 
-                    df_ots_dashboard = pd.read_excel(
-                        archivo_ots_dashboard,
-                        sheet_name="List of Work Orders",
-                        engine="openpyxl"
-                    )
-
-                    df_ots_dashboard.columns = (
-                        df_ots_dashboard.columns
-                        .astype(str)
-                        .str.strip()
+                    (
+                        registros_dashboard,
+                        mes_nombre_dashboard,
+                        total_dashboard,
+                        df_ots_dashboard
+                    ) = preparar_ots_dashboard(
+                        archivo_ots_dashboard
                     )
 
                     st.success(
                         "Archivo leido correctamente."
+                    )
+
+                    st.info(
+                        f"Periodo detectado: "
+                        f"{mes_nombre_dashboard}"
+                        f"{ANIO_OTS_DASHBOARD}"
                     )
 
                     col_ot1, col_ot2, col_ot3 = st.columns(3)
@@ -5325,34 +5327,17 @@ if modo == "Admin":
                         )
 
                     with col_ot2:
-                        if "Work Order" in df_ots_dashboard.columns:
-                            ots_unicas = (
-                                df_ots_dashboard["Work Order"]
-                                .astype(str)
-                                .nunique()
-                            )
-                        else:
-                            ots_unicas = 0
 
                         st.metric(
                             "OTs unicas",
-                            ots_unicas
+                            total_dashboard
                         )
 
                     with col_ot3:
-                        if "Work Order" in df_ots_dashboard.columns:
-                            duplicadas = (
-                                df_ots_dashboard["Work Order"]
-                                .astype(str)
-                                .duplicated()
-                                .sum()
-                            )
-                        else:
-                            duplicadas = 0
 
                         st.metric(
                             "Duplicadas",
-                            duplicadas
+                            0
                         )
 
                     st.markdown("### Vista Previa")
@@ -5361,6 +5346,78 @@ if modo == "Admin":
                         use_container_width=True,
                         hide_index=True
                     )
+
+                    st.warning(
+                        f"Se sincronizarán "
+                        f"{total_dashboard} OTs de "
+                        f"{mes_nombre_dashboard} "
+                        f"{ANIO_OTS_DASHBOARD} "
+                        f"con el Dashboard."
+                    )
+
+                    sincronizar_ots_dashboard = st.button(
+                        "Sincronizar OTs con Dashboard",
+                        type="primary",
+                        use_container_width=True,
+                        key="btn_sincronizar_ots_dashboard"
+                    )
+
+                    if sincronizar_ots_dashboard:
+                        TAMANO_LOTE = 500
+
+                        barra = st.progress(0)
+
+                        texto_progreso = st.empty()
+
+                        total_registros = len(
+                            registros_dashboard
+                        )
+
+                        for inicio in range(
+                            0,
+                            total_registros,
+                            TAMANO_LOTE
+                        ):
+                            lote = registros_dashboard[
+                                inicio:
+                                inicio + TAMANO_LOTE
+                            ]
+
+                            supabase_admin.table(
+                                "maximo_ots"
+                            ).upsert(
+                                lote,
+                                on_conflict="numero_ot"
+                            ).execute()
+
+                            fin = min(
+                                inicio + TAMANO_LOTE,
+                                total_registros
+                            )
+
+                            progreso = (
+                                fin /
+                                total_registros
+                            )
+
+                            barra.progress(
+                                progreso
+                            )
+
+                            texto_progreso.write(
+                                f"Sincronizados "
+                                f"{fin} / "
+                                f"{total_registros}"
+                            )
+
+                        barra.progress(1.0)
+
+                        st.success(
+                            f"{total_registros} OTs de "
+                            f"{mes_nombre_dashboard} "
+                            f"sincronizadas correctamente"
+                            f"con el Dashboard."
+                        )
 
                 except Exception as e:
 
